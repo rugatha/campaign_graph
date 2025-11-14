@@ -29,10 +29,23 @@ window.RugathaRender = (function () {
   function renderNodeControls(g, node, bounds, handlers) {
     if (node.level > 2) return;
 
-    const offsetX = bounds.width / 2 + 24;
+    const halfW = bounds.width / 2;
+    const buttonOffsetX = 14; // 距離邊緣一點，避免貼邊
     const buttons = [
-      { type: "expand", label: "+", offsetX: -offsetX, offsetY: 0, handler: handlers.onExpand },
-      { type: "collapse", label: "-", offsetX: offsetX, offsetY: 0, handler: handlers.onCollapse }
+      {
+        type: "expand",
+        label: "+",
+        offsetX: -halfW + buttonOffsetX,
+        offsetY: 0,
+        handler: handlers.onExpand
+      },
+      {
+        type: "collapse",
+        label: "-",
+        offsetX: halfW - buttonOffsetX,
+        offsetY: 0,
+        handler: handlers.onCollapse
+      }
     ];
 
     const controls = g.append("g")
@@ -52,10 +65,10 @@ window.RugathaRender = (function () {
       });
 
     btnSel.append("rect")
-      .attr("x", -12)
-      .attr("y", -12)
-      .attr("width", 24)
-      .attr("height", 24)
+      .attr("x", -10)
+      .attr("y", -10)
+      .attr("width", 20)
+      .attr("height", 20)
       .attr("rx", 4)
       .attr("ry", 4);
 
