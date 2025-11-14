@@ -38,7 +38,8 @@ const BASE_CAMPAIGN_GRAPH_DATA = [
     id: "rugatha-c05",
     label: "C05 Mattington Shattered",
     level: 3,
-    parent: "rugatha-main"
+    parent: "rugatha-main",
+    extraParents: ["plus", "lite"]
   },
 
   // ===== Rugatha Plus =====
