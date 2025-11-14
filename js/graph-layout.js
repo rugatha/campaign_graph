@@ -20,6 +20,68 @@ window.RugathaLayout = (function () {
     });
   }
 
+  function estimateNodeRadius(node) {
+    if (!node) return 80;
+    if (node.level === 1) return 160;
+    if (node.level === 2) return 120;
+    if (node.level === 3) return 90;
+    return 80;
+  }
+
+  function findAvailableSlot(targetX, targetY, node, occupied) {
+    const padding = 18;
+    const selfRadius = estimateNodeRadius(node);
+
+    function isFree(x, y) {
+      for (const other of occupied) {
+        if (other === node) continue;
+        if (!other.visible) continue;
+        if (!isFinite(other.x) || !isFinite(other.y)) continue;
+        const minDist = selfRadius + estimateNodeRadius(other) + padding;
+        const dx = other.x - x;
+        const dy = other.y - y;
+        if (Math.hypot(dx, dy) < minDist) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    if (isFree(targetX, targetY)) {
+      return { x: targetX, y: targetY };
+    }
+
+    const axisStep = 36;
+    for (let m = 1; m <= 5; m++) {
+      const dist = axisStep * m;
+      const candidates = [
+        { x: targetX, y: targetY - dist },
+        { x: targetX, y: targetY + dist },
+        { x: targetX + dist, y: targetY },
+        { x: targetX - dist, y: targetY }
+      ];
+      for (const c of candidates) {
+        if (isFree(c.x, c.y)) return c;
+      }
+    }
+
+    const spiralStep = 28;
+    for (let ring = 1; ring <= 8; ring++) {
+      const radius = ring * spiralStep;
+      const samples = Math.max(8, ring * 6);
+      for (let i = 0; i < samples; i++) {
+        const angle = (i / samples) * Math.PI * 2;
+        const x = targetX + Math.cos(angle) * radius;
+        const y = targetY + Math.sin(angle) * radius;
+        if (isFree(x, y)) {
+          return { x, y };
+        }
+      }
+    }
+
+    return { x: targetX, y: targetY };
+  }
+
   /**
    * 根據 expanded 狀態，決定哪些節點要顯示
    */
@@ -50,7 +112,7 @@ window.RugathaLayout = (function () {
   /**
    * 子節點扇形排在母節點右側（只設 initial x/y，不再使用 fx/fy）
    */
-  function placeChildrenFan(parent, kids) {
+  function placeChildrenFan(parent, kids, occupiedNodes) {
     if (!kids || kids.length === 0) return;
 
     const fan = Math.PI * 0.95;   // 約 170 度扇形，展開時有更大垂直間距
@@ -74,14 +136,18 @@ window.RugathaLayout = (function () {
       const targetX = parent.x + Math.cos(angle) * r;
       const targetY = parent.y + Math.sin(angle) * r + offset;
 
+      const slot = findAvailableSlot(targetX, targetY, c, occupiedNodes || kids);
+      const finalX = slot.x;
+      const finalY = slot.y;
+
       // 只設 initial x/y，不釘死
       if (!isFinite(c.x) || !isFinite(c.y)) {
-        c.x = targetX;
-        c.y = targetY;
+        c.x = finalX;
+        c.y = finalY;
       } else {
         // 已經有位置的話，稍微往目標拉近
-        c.x = (c.x * 2 + targetX) / 3;
-        c.y = (c.y * 2 + targetY) / 3;
+        c.x = (c.x * 2 + finalX) / 3;
+        c.y = (c.y * 2 + finalY) / 3;
       }
     });
   }
@@ -111,7 +177,7 @@ window.RugathaLayout = (function () {
     rawMap.forEach(n => {
       if (n.expanded && n.children && n.children.length > 0) {
         const kids = n.children.filter(c => c.visible);
-        placeChildrenFan(n, kids);
+        placeChildrenFan(n, kids, nodes);
       }
     });
 
