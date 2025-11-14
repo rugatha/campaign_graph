@@ -113,26 +113,31 @@ window.RugathaLayout = (function () {
    * 子節點依「母節點相對父層的反方向」扇形展開（只設 initial x/y，不再使用 fx/fy）
    */
   function getFanCenter(parent, rawMap) {
+    // parent 或祖先資料不足就回傳 0，保持原方向
     if (!parent || !parent.parent || !rawMap) return 0;
+    // 找到本節點的父層（祖先）座標
     const grand = rawMap.get(parent.parent);
     if (!grand || !isFinite(grand.x) || !isFinite(grand.y)) return 0;
     if (!isFinite(parent.x) || !isFinite(parent.y)) return 0;
 
+    // 計算「從目前節點指向父層」的向量
     const dxToParent = grand.x - parent.x;
     const dyToParent = grand.y - parent.y;
     if (Math.abs(dxToParent) < 1e-2 && Math.abs(dyToParent) < 1e-2) return 0;
 
+    // atan2 得到朝向父層的角度
     const towardParent = Math.atan2(dyToParent, dxToParent);
-    return towardParent + Math.PI; // 轉 180 度，指向背離父層的方向
+    // 加 PI (180°) 讓扇形朝反方向張開
+    return towardParent;
   }
 
   function placeChildrenFan(parent, kids, occupiedNodes, rawMap) {
     if (!kids || kids.length === 0) return;
 
     const fan = Math.PI * 0.95;   // 約 170 度扇形，展開時有更大垂直間距
-    const center = getFanCenter(parent, rawMap);
-    const start = center - fan / 2;
-    const end   = center + fan / 2;
+    const center = getFanCenter(parent, rawMap); // 依前面函式決定扇形中心角度
+    const start = center - fan / 2;              // 扇形起始角
+    const end   = center + fan / 2;              // 扇形結束角
 
     // 不同層級用不同半徑，避免線太長
     const baseRadius =
