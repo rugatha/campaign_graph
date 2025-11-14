@@ -42,7 +42,7 @@ const BASE_CAMPAIGN_GRAPH_DATA = [
   },
 
   // ===== Rugatha Plus =====
-  { id: "plus", label: "Rugatha Plus", level: 2, parent: "rugatha" },
+  { id: "plus", label: "Rugatha Plus", level: 2, parent: "rugatha-main" },
   {
     id: "plus-c05",
     label: "C05 Mattington Shattered",
@@ -72,7 +72,7 @@ const BASE_CAMPAIGN_GRAPH_DATA = [
   },
 
   // ===== Rugatha lite =====
-  { id: "lite", label: "Rugatha lite", level: 2, parent: "rugatha" },
+  { id: "lite", label: "Rugatha lite", level: 2, parent: "rugatha-main" },
   {
     id: "lite-c05",
     label: "C05 Mattington Shattered",
