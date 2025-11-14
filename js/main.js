@@ -1,3 +1,4 @@
+// js/main.js
 (function () {
   const rawData = window.CAMPAIGN_GRAPH_DATA || [];
 
@@ -7,7 +8,7 @@
   const width = svg.node().clientWidth;
   const height = svg.node().clientHeight;
 
-  // 建 nodeMap，先塞基本屬性
+  // 建 nodeMap + 基本屬性
   const nodeMap = new Map();
   rawData.forEach(d => {
     const node = Object.assign({}, d);
@@ -17,31 +18,32 @@
     node.fy = null;
     node.children = [];
     node.visible = false;
-    node.expanded = node.level === 1; // root 預設展開
+    node.expanded = node.level === 1; // 只 root 預設展開
     nodeMap.set(node.id, node);
   });
 
-  // 建立 parent / children 結構
   RugathaLayout.buildHierarchy(nodeMap);
 
-  // ⭐ 一開始就做一個「看起來像樹狀圖」的初始位置，避免線拖太長
+  /**
+   * 起始位置排版：
+   * - Root 放在畫面左側 20% 的位置
+   * - 第二層在畫面中央偏右（約 50% 寬度），垂直排開，彼此間距 120
+   * - 第三層先不用特別排，展開時由 layout 做扇形
+   */
   function initPositions() {
-    // 找 root（level === 1，且 parent 為 null）
     let root = null;
     nodeMap.forEach(n => {
-      if (n.level === 1 && !n.parent) {
-        root = n;
-      }
+      if (n.level === 1 && !n.parent) root = n;
     });
     if (!root) return;
 
-    const cx = width * 0.3;   // root 稍微偏左
-    const cy = height * 0.5;
+    const rootX = width * 0.2;
+    const rootY = height * 0.5;
 
-    root.x = cx;
-    root.y = cy;
+    root.x = rootX;
+    root.y = rootY;
 
-    // Level 2：排列在 root 右側，一條直線垂直排
+    // 第二層節點
     const level2Nodes = [];
     nodeMap.forEach(n => {
       if (n.level === 2 && n.parent === root.id) {
@@ -49,34 +51,19 @@
       }
     });
 
-    const gapY2 = 110; // 第二層節點垂直間距
-    const startY2 = cy - (level2Nodes.length - 1) * gapY2 / 2;
-    const x2 = cx + 260; // 第二層離 root 的距離
+    const gapY2 = 120;
+    const x2 = width * 0.5; // 中央偏右
+    const startY2 = rootY - (level2Nodes.length - 1) * gapY2 / 2;
 
     level2Nodes.forEach((n, i) => {
       n.x = x2;
       n.y = startY2 + i * gapY2;
     });
 
-    // Level 3：依各自母節點，稍微扇形排在右邊
-    nodeMap.forEach(n => {
-      if (n.level === 3 && n.parent && nodeMap.has(n.parent)) {
-        const p = nodeMap.get(n.parent);
-        if (!p) return;
-
-        const siblings = p.children.filter(c => c.level === 3);
-        const index = siblings.findIndex(s => s.id === n.id);
-        const gapY3 = 60;
-        const startY3 = p.y - (siblings.length - 1) * gapY3 / 2;
-        const x3 = p.x + 220;
-
-        n.x = x3;
-        n.y = startY3 + index * gapY3;
-      }
-    });
+    // 第三層位置不用強制排，展開時再由 layout 補上初始扇形位置
   }
 
-  // 先跑一次初始排版
+  // ⭐ 一開始安排合理初始位置，避免線超長與重疊
   initPositions();
 
   const viewport = svg.append("g").attr("id", "rugatha-viewport");
@@ -85,19 +72,22 @@
   let nodes = [];
   let links = [];
 
-  // 啟用 zoom 控制
   const zoomApi = RugathaZoom.applyZoom(svg, viewport, width, height);
 
-  // 建第一版 graph
   ({ nodes, links } = RugathaLayout.buildGraph(nodeMap));
 
-  // 建立 force simulation（用初始位置微調，不會從全重疊開始）
   const simulation = d3.forceSimulation(nodes)
     .force("link", d3.forceLink(links)
       .id(d => d.id)
-      .distance(140)          // 稍微短一點，線不會太長
-      .strength(0.35))
-    .force("charge", d3.forceManyBody().strength(-260)) // 稍微溫和
+      .distance(d => {
+        // 根據來源層級調整線距離，避免一下太長
+        const srcLevel = d.source.level || 2;
+        if (srcLevel === 1) return 220;
+        if (srcLevel === 2) return 180;
+        return 140;
+      })
+      .strength(0.4))
+    .force("charge", d3.forceManyBody().strength(-220))
     .force("collide", d3.forceCollide().radius(60))
     .force("center", d3.forceCenter(width / 2, height / 2))
     .alphaTarget(0.08)
@@ -115,7 +105,7 @@
     simulation.force("link").links(links);
     simulation.alpha(0.3).restart();
 
-    // 更新線
+    // Edge
     linkSel = linkSel.data(links, d => d.source.id + "-" + d.target.id);
     linkSel.exit().remove();
     linkSel = linkSel.enter()
@@ -123,7 +113,7 @@
       .attr("class", "rugatha-edge")
       .merge(linkSel);
 
-    // 更新節點
+    // Node
     nodeSel = nodeSel.data(nodes, d => d.id);
     nodeSel.exit().remove();
 
@@ -161,7 +151,7 @@
   // 初始 render
   update();
 
-  // 一進入頁面時：依目前所有節點做一次 fitToView，畫面不會怪偏
+  // 一進頁面後稍微等 layout 穩定，再做一次 fitToView
   setTimeout(() => {
     zoomApi.fitTo(nodes);
   }, 400);
@@ -186,14 +176,14 @@
     e.stopPropagation();
     pendingCenter = null;
 
-    // Home：只保留第一、第二層展開狀態
+    // Home：回到只顯示第一、第二層
     nodeMap.forEach(n => {
       if (n.level === 1) n.expanded = true;
       else if (n.level === 2) n.expanded = false;
       else n.expanded = false;
     });
 
-    // 重新設一次初始位置，讓圖回到穩定的樹狀配置
+    // 重新設一次初始位置，讓 layout 回到乾淨的樹狀
     initPositions();
     update();
     zoomApi.reset();
