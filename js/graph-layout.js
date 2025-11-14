@@ -125,8 +125,11 @@ window.RugathaLayout = (function () {
     const dyToParent = grand.y - parent.y;
     if (Math.abs(dxToParent) < 1e-2 && Math.abs(dyToParent) < 1e-2) return 0;
 
+    // Canvas 的 y 軸向下遞增，因此要把 y 差值轉為「數學座標系」(向上為正) 再傳給 atan2
+    const mathDyToParent = -dyToParent;
+
     // atan2 得到朝向父層的角度（第 2 層保持這個方向，第 3 層之後再調整）
-    let centerAngle = Math.atan2(dyToParent, dxToParent);
+    let centerAngle = Math.atan2(mathDyToParent, dxToParent);
 
     // 若 parent.level === 2，表示即將繪製第 3 層；將扇形整體轉 180°
     if (parent.level === 2) {
