@@ -8,9 +8,9 @@
   <style>
     body {
       margin: 0;
-      background: #0b0d11;
+      background: #445f56; /* 主底色 */
       color: #e5e7eb;
-      font-family: system-ui, sans-serif;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
     h1 {
@@ -24,274 +24,349 @@
     #rugatha-graph-plugin {
       width: 100%;
       height: calc(100vh - 60px);
+      max-height: 700px;
+      box-sizing: border-box;
     }
 
     #rugatha-graph-svg {
       width: 100%;
       height: 100%;
-      background: #05070a;
+      background: #445f56; /* 與頁面同色 */
       cursor: grab;
       user-select: none;
     }
 
-    .rugatha-edge {
-      stroke: #374151;
-      stroke-width: 1.3;
-      stroke-opacity: 0.7;
+    #rugatha-graph-svg.rugatha-panning {
+      cursor: grabbing;
     }
 
+    /* 關聯線 */
+    .rugatha-edge {
+      stroke: #e4efe9;
+      stroke-width: 1.4;
+      stroke-opacity: 0.85;
+    }
+
+    /* 圓角矩形（寬高由 JS 控制） */
     .node-rect {
-      stroke: #111827;
+      stroke: #203028;
       stroke-width: 1.4;
     }
-    .level-2 .node-rect { fill: #3b82f6; }
-    .level-3 .node-rect { fill: #9ca3af; }
 
+    .level-2 .node-rect {
+      fill: #c6dfd2; /* 次階：柔和綠灰 */
+    }
+
+    .level-3 .node-rect {
+      fill: #f4efe5; /* 第三階：奶油白 */
+    }
+
+    /* 文字 */
     .node-label {
       fill: #f9fafb;
       pointer-events: none;
       text-anchor: middle;
       dominant-baseline: central;
     }
-    .level-1 .node-label { font-size: 14px; font-weight: 800; }
-    .level-2 .node-label { font-size: 12px; font-weight: 700; }
-    .level-3 .node-label { font-size: 10px; font-weight: 500; }
+
+    .level-1 .node-label {
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .level-2 .node-label {
+      font-size: 12px;
+      font-weight: 700;
+      fill: #203028; /* 在淡底上換成深色文字比較清楚 */
+    }
+
+    .level-3 .node-label {
+      font-size: 10px;
+      font-weight: 500;
+      fill: #3b3a34;
+    }
   </style>
 </head>
-
 <body>
-<h1>Rugatha Campaign Graph</h1>
+  <h1>Rugatha Campaign Graph</h1>
 
-<div id="rugatha-graph-plugin">
-  <svg id="rugatha-graph-svg"></svg>
-</div>
+  <div id="rugatha-graph-plugin">
+    <svg id="rugatha-graph-svg"></svg>
+  </div>
 
-<script src="graph-data.js"></script>
-<script src="https://d3js.org/d3.v7.min.js"></script>
+  <!-- 階層資料 -->
+  <script src="graph-data.js"></script>
 
-<script>
-(function () {
+  <!-- D3 -->
+  <script src="https://d3js.org/d3.v7.min.js"></script>
 
-const ROOT_ICON_URL =
-  "https://rugatha.wordpress.com/wp-content/uploads/2025/05/cropped-e69caae591bde5908d-1_e5b7a5e4bd9ce58d80e59f9f-1-1.png";
+  <script>
+    (function () {
+      const ROOT_ICON_URL =
+        "https://rugatha.wordpress.com/wp-content/uploads/2025/05/cropped-e69caae591bde5908d-1_e5b7a5e4bd9ce58d80e59f9f-1-1.png";
 
-const rawData = window.CAMPAIGN_GRAPH_DATA || [];
+      const rawData = window.CAMPAIGN_GRAPH_DATA || [];
 
-function init() {
-  const svg = d3.select("#rugatha-graph-svg");
-  const width = svg.node().clientWidth;
-  const height = svg.node().clientHeight;
+      function init() {
+        const svg = d3.select("#rugatha-graph-svg");
+        if (svg.empty()) return;
 
-  const viewport = svg.append("g").attr("id", "v");
+        const width = svg.node().clientWidth;
+        const height = svg.node().clientHeight;
 
-  // Build node map
-  const nodeById = new Map();
-  rawData.forEach(d => {
-    nodeById.set(d.id, {
-      id: d.id,
-      label: d.label,
-      level: d.level,
-      parent: d.parent,
-      children: [],
-      expanded: d.level === 1,
-      visible: false,
-      x: width / 2,
-      y: height / 2
-    });
-  });
+        const viewport = svg.append("g").attr("id", "rugatha-viewport");
 
-  nodeById.forEach(n => {
-    if (n.parent) nodeById.get(n.parent).children.push(n);
-  });
+        // 建 node map
+        const nodeById = new Map();
+        rawData.forEach(d => {
+          nodeById.set(d.id, {
+            id: d.id,
+            label: d.label,
+            level: d.level,
+            parent: d.parent,
+            children: [],
+            expanded: d.level === 1, // root 預設展開
+            visible: false,
+            x: width / 2,
+            y: height / 2
+          });
+        });
 
-  function computeVisibility() {
-    nodeById.forEach(n => (n.visible = false));
-    nodeById.forEach(n => { if (!n.parent) n.visible = true; });
+        // parent → children
+        nodeById.forEach(n => {
+          if (n.parent && nodeById.has(n.parent)) {
+            nodeById.get(n.parent).children.push(n);
+          }
+        });
 
-    let changed = true;
-    while (changed) {
-      changed = false;
-      nodeById.forEach(n => {
-        if (!n.parent) return;
-        const p = nodeById.get(n.parent);
-        if (p.visible && p.expanded && !n.visible) {
-          n.visible = true; changed = true;
+        // 根據 expanded 決定 visible
+        function computeVisibility() {
+          nodeById.forEach(n => (n.visible = false));
+          nodeById.forEach(n => { if (!n.parent) n.visible = true; });
+
+          let changed = true;
+          while (changed) {
+            changed = false;
+            nodeById.forEach(n => {
+              if (!n.parent) return;
+              const p = nodeById.get(n.parent);
+              const should = p && p.visible && p.expanded;
+              if (should && !n.visible) {
+                n.visible = true;
+                changed = true;
+              }
+            });
+          }
         }
-      });
-    }
-  }
 
-  // Rounded rectangle size
-  function getRectSize(n) {
-    const t = n.label.length;
-    let baseW, baseH, perChar;
-    if (n.level === 1) { baseW = 180; baseH = 60; perChar = 5; }
-    else if (n.level === 2) { baseW = 170; baseH = 50; perChar = 4.5; }
-    else { baseW = 160; baseH = 44; perChar = 4; }
+        // 依 label 長度 & 層級做圓角矩形尺寸
+        function getRectSize(n) {
+          const len = n.label.length;
+          let baseW, baseH, perChar;
+          if (n.level === 1) {
+            baseW = 180; baseH = 60; perChar = 5;
+          } else if (n.level === 2) {
+            baseW = 170; baseH = 50; perChar = 4.5;
+          } else {
+            baseW = 160; baseH = 44; perChar = 4;
+          }
+          const width = Math.max(baseW, 40 + len * perChar);
+          const height = baseH;
+          return { width, height };
+        }
 
-    const w = Math.max(baseW, 40 + t * perChar);
-    return { width: w, height: baseH };
-  }
+        // 子節點順時針環繞母節點
+        function placeChildrenClockwise(parent, children) {
+          if (!children || children.length === 0) return;
+          const step = (2 * Math.PI) / children.length;
+          const radius = parent.level === 1 ? 260 : 210; // 主線拉得比較遠一點
 
-  // Child radial placement (clockwise)
-  function placeChildrenClockwise(parent, children) {
-    const step = (2 * Math.PI) / children.length;
-    const radius = parent.level === 1 ? 260 : 210;  // 層級越高，外圈越遠
+          children.forEach((c, i) => {
+            const angle = 0 - i * step; // 從右側開始順時針
+            c.fx = parent.x + Math.cos(angle) * radius;
+            c.fy = parent.y + Math.sin(angle) * radius;
+          });
+        }
 
-    children.forEach((c, i) => {
-      const a = 0 - i * step; // 順時針
-      c.fx = parent.x + Math.cos(a) * radius;
-      c.fy = parent.y + Math.sin(a) * radius;
-    });
-  }
+        function buildGraphData() {
+          computeVisibility();
 
-  function buildGraphData() {
-    computeVisibility();
-    const nodes = [];
-    const links = [];
+          const nodes = [];
+          const links = [];
+          nodeById.forEach(n => { if (n.visible) nodes.push(n); });
+          nodeById.forEach(n => {
+            if (!n.visible || !n.parent) return;
+            const p = nodeById.get(n.parent);
+            if (p && p.visible) {
+              links.push({ source: p, target: n });
+            }
+          });
 
-    nodeById.forEach(n => { if (n.visible) nodes.push(n); });
-    nodeById.forEach(n => {
-      if (n.visible && n.parent) {
-        links.push({ source: nodeById.get(n.parent), target: n });
+          // 每個展開的母節點，先把可見子節點排好 fx/fy
+          nodes.forEach(n => {
+            if (n.expanded && n.children && n.children.length > 0) {
+              const kids = n.children.filter(c => c.visible);
+              placeChildrenClockwise(n, kids);
+            }
+          });
+
+          return { nodes, links };
+        }
+
+        let { nodes, links } = buildGraphData();
+
+        // Force simulation
+        const simulation = d3.forceSimulation(nodes)
+          .force("link", d3.forceLink(links)
+            .id(d => d.id)
+            .distance(160)
+            .strength(0.3))
+          .force("charge", d3.forceManyBody().strength(-400))
+          .force("collide", d3.forceCollide().radius(d => getRectSize(d).width / 2 + 20))
+          .force("center", d3.forceCenter(width / 2, height / 2))
+          .alphaTarget(0.15)
+          .on("tick", ticked);
+
+        let linkSel = viewport.append("g").attr("class", "edges").selectAll("line");
+        let nodeSel = viewport.append("g").attr("class", "nodes").selectAll("g");
+
+        function updateGraph() {
+          ({ nodes, links } = buildGraphData());
+          simulation.nodes(nodes);
+          simulation.force("link").links(links);
+          simulation.alpha(0.5).restart(); // 動畫啟動，但比之前更溫和
+
+          // edges
+          linkSel = linkSel.data(links, d => d.source.id + "-" + d.target.id);
+          linkSel.exit().remove();
+          linkSel = linkSel.enter()
+            .append("line")
+            .attr("class", "rugatha-edge")
+            .merge(linkSel);
+
+          // nodes
+          nodeSel = nodeSel.data(nodes, d => d.id);
+          nodeSel.exit().remove();
+
+          const enter = nodeSel.enter()
+            .append("g")
+            .attr("class", d => "level-" + d.level)
+            .call(
+              d3.drag()
+                .on("start", dragstarted)
+                .on("drag", dragged)
+                .on("end", dragended)
+            );
+
+          // Root 用 icon，其餘用圓角矩形
+          enter.each(function (d) {
+            const g = d3.select(this);
+            if (d.level === 1) {
+              const size = 90;
+              g.append("image")
+                .attr("href", ROOT_ICON_URL)
+                .attr("width", size)
+                .attr("height", size)
+                .attr("x", -size / 2)
+                .attr("y", -size / 2);
+            } else {
+              const r = getRectSize(d);
+              g.append("rect")
+                .attr("class", "node-rect")
+                .attr("x", -r.width / 2)
+                .attr("y", -r.height / 2)
+                .attr("width", r.width)
+                .attr("height", r.height)
+                .attr("rx", 18)
+                .attr("ry", 18);
+            }
+          });
+
+          // 文字（root 不顯示文字）
+          enter.append("text")
+            .attr("class", "node-label")
+            .text(d => (d.level === 1 ? "" : d.label));
+
+          // 點節點：展開/收合 + 同步視角移動
+          enter.on("click", (event, d) => {
+            event.stopPropagation();
+
+            // 先觸發視角移動（以目前座標為中心），動畫 350ms
+            centerOnNode(d, 350);
+
+            if (d.children && d.children.length > 0) {
+              d.expanded = !d.expanded;
+              updateGraph();
+            }
+          });
+
+          nodeSel = enter.merge(nodeSel);
+        }
+
+        function ticked() {
+          linkSel
+            .attr("x1", d => d.source.x)
+            .attr("y1", d => d.source.y)
+            .attr("x2", d => d.target.x)
+            .attr("y2", d => d.target.y);
+
+          nodeSel.attr("transform", d => `translate(${d.x},${d.y})`);
+        }
+
+        function dragstarted(event, d) {
+          if (!event.active) simulation.alphaTarget(0.15).restart();
+          d.fx = d.x;
+          d.fy = d.y;
+        }
+
+        function dragged(event, d) {
+          d.fx = event.x;
+          d.fy = event.y;
+        }
+
+        function dragended(event, d) {
+          if (!event.active) simulation.alphaTarget(0);
+          d.fx = null;
+          d.fy = null;
+        }
+
+        // Zoom / pan
+        const zoom = d3.zoom()
+          .scaleExtent([0.3, 3])
+          .on("zoom", (event) => {
+            viewport.attr("transform", event.transform);
+          });
+
+        svg.call(zoom);
+
+        // 置中某節點（動畫時間可調）
+        function centerOnNode(node, duration) {
+          const d = duration || 350;
+          const t = d3.zoomIdentity
+            .translate(width / 2 - node.x, height / 2 - node.y)
+            .scale(1);
+
+          svg.transition()
+            .duration(d)
+            .call(zoom.transform, t);
+        }
+
+        // 點背景重置視角（也用 350ms）
+        svg.on("click", () => {
+          const t = d3.zoomIdentity.translate(width / 2, height / 2).scale(1);
+          svg.transition().duration(350).call(zoom.transform, t);
+        });
+
+        // 初始 render
+        updateGraph();
       }
-    });
 
-    // apply radial placement
-    nodes.forEach(n => {
-      if (n.expanded && n.children.length > 0) {
-        const visibleKids = n.children.filter(c => c.visible);
-        placeChildrenClockwise(n, visibleKids);
-      }
-    });
-
-    return { nodes, links };
-  }
-
-  let { nodes, links } = buildGraphData();
-
-    const simulation = d3.forceSimulation(nodes)
-    .force("link", d3.forceLink(links)
-      .id(d => d.id)
-      .distance(160)
-      .strength(0.3))
-    .force("charge", d3.forceManyBody().strength(-400))
-    .force("collide", d3.forceCollide().radius(d => getRectSize(d).width / 2 + 20))
-    .force("x", d3.forceX(d => d.parent ? (d.parent * 3) : 0).strength(0.05))
-    .force("y", d3.forceY(height / 2).strength(0.02))
-    .alphaTarget(0.15)  <!-- 動畫速度下降一半 -->
-    .on("tick", ticked);
-
-  let linkSel = viewport.append("g").selectAll("line");
-  let nodeSel = viewport.append("g").selectAll("g");
-
-  function updateGraph() {
-    ({ nodes, links } = buildGraphData());
-    simulation.nodes(nodes);
-    simulation.force("link").links(links);
-    simulation.alpha(0.5).restart();  <!-- 平滑動畫模式 -->
-
-    linkSel = linkSel.data(links, d => d.source.id + "-" + d.target.id);
-    linkSel.exit().remove();
-    linkSel = linkSel.enter().append("line")
-      .attr("class", "rugatha-edge")
-      .merge(linkSel);
-
-    nodeSel = nodeSel.data(nodes, d => d.id);
-    nodeSel.exit().remove();
-
-    const enter = nodeSel.enter()
-      .append("g")
-      .attr("class", d => "level-" + d.level)
-      .call(d3.drag()
-        .on("start", dragstart)
-        .on("drag", dragmove)
-        .on("end", dragend));
-
-    // Root icon
-    enter.each(function(d) {
-      const g = d3.select(this);
-      if (d.level === 1) {
-        const size = 90;
-        g.append("image")
-          .attr("href", ROOT_ICON_URL)
-          .attr("width", size)
-          .attr("height", size)
-          .attr("x", -size/2)
-          .attr("y", -size/2);
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", init);
       } else {
-        const r = getRectSize(d);
-        g.append("rect")
-          .attr("class", "node-rect")
-          .attr("x", -r.width/2)
-          .attr("y", -r.height/2)
-          .attr("width", r.width)
-          .attr("height", r.height)
-          .attr("rx", 18).attr("ry", 18);
+        init();
       }
-    });
-
-    enter.append("text")
-      .attr("class", "node-label")
-      .text(d => (d.level === 1 ? "" : d.label));
-
-    enter.on("click", (event, d) => {
-      event.stopPropagation();
-      if (d.children.length > 0) d.expanded = !d.expanded;
-      updateGraph();
-      center(d);
-    });
-
-    nodeSel = enter.merge(nodeSel);
-  }
-
-  function ticked() {
-    linkSel
-      .attr("x1", d => d.source.x)
-      .attr("y1", d => d.source.y)
-      .attr("x2", d => d.target.x)
-      .attr("y2", d => d.target.y);
-
-    nodeSel.attr("transform", d => `translate(${d.x},${d.y})`);
-  }
-
-  function dragstart(event, d) {
-    if (!event.active) simulation.alphaTarget(0.15).restart();
-    d.fx = d.x; d.fy = d.y;
-  }
-
-  function dragmove(event, d) {
-    d.fx = event.x; d.fy = event.y;
-  }
-
-  function dragend(event, d) {
-    if (!event.active) simulation.alphaTarget(0);
-    d.fx = null; d.fy = null;
-  }
-
-  const zoom = d3.zoom().scaleExtent([0.3, 3])
-    .on("zoom", e => viewport.attr("transform", e.transform));
-
-  svg.call(zoom);
-
-  function center(n) {
-    const t = d3.zoomIdentity
-      .translate(width/2 - n.x, height/2 - n.y)
-      .scale(1);
-
-    svg.transition().duration(700).call(zoom.transform, t);
-  }
-
-  svg.on("click", () => center({x:0, y:0}));
-  updateGraph();
-}
-
-if (document.readyState === "loading")
-  document.addEventListener("DOMContentLoaded", init);
-else init();
-
-})();
-</script>
-
+    })();
+  </script>
 </body>
 </html>
