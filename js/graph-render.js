@@ -29,10 +29,10 @@ window.RugathaRender = (function () {
   function renderNodeControls(g, node, bounds, handlers) {
     if (node.level > 2) return;
 
-    const offsetX = bounds.width / 2 + 20;
+    const offsetX = bounds.width / 2 + 24;
     const buttons = [
-      { type: "expand", label: "+", offsetY: -14, handler: handlers.onExpand },
-      { type: "collapse", label: "-", offsetY: 14, handler: handlers.onCollapse }
+      { type: "expand", label: "+", offsetX: -offsetX, offsetY: 0, handler: handlers.onExpand },
+      { type: "collapse", label: "-", offsetX: offsetX, offsetY: 0, handler: handlers.onCollapse }
     ];
 
     const controls = g.append("g")
@@ -43,7 +43,7 @@ window.RugathaRender = (function () {
       .enter()
       .append("g")
       .attr("class", d => "node-btn node-btn-" + d.type)
-      .attr("transform", d => `translate(${offsetX},${d.offsetY})`)
+      .attr("transform", d => `translate(${d.offsetX},${d.offsetY})`)
       .on("click", (event, data) => {
         event.stopPropagation();
         if (typeof data.handler === "function") {
@@ -52,10 +52,10 @@ window.RugathaRender = (function () {
       });
 
     btnSel.append("rect")
-      .attr("x", -10)
-      .attr("y", -10)
-      .attr("width", 20)
-      .attr("height", 20)
+      .attr("x", -12)
+      .attr("y", -12)
+      .attr("width", 24)
+      .attr("height", 24)
       .attr("rx", 4)
       .attr("ry", 4);
 
