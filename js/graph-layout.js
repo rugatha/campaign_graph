@@ -110,13 +110,25 @@ window.RugathaLayout = (function () {
   }
 
   /**
-   * 子節點扇形排在母節點右側（只設 initial x/y，不再使用 fx/fy）
+   * 子節點依「母節點相對祖先的反方向」扇形展開（只設 initial x/y，不再使用 fx/fy）
    */
-  function placeChildrenFan(parent, kids, occupiedNodes) {
+  function getFanCenter(parent, rawMap) {
+    if (!parent || !parent.parent || !rawMap) return 0;
+    const grand = rawMap.get(parent.parent);
+    if (!grand || !isFinite(grand.x) || !isFinite(grand.y)) return 0;
+    if (!isFinite(parent.x) || !isFinite(parent.y)) return 0;
+
+    const dx = parent.x - grand.x;
+    const dy = parent.y - grand.y;
+    if (Math.abs(dx) < 1e-2 && Math.abs(dy) < 1e-2) return 0;
+    return Math.atan2(dy, dx); // 取母節點相對祖先的反方向
+  }
+
+  function placeChildrenFan(parent, kids, occupiedNodes, rawMap) {
     if (!kids || kids.length === 0) return;
 
     const fan = Math.PI * 0.95;   // 約 170 度扇形，展開時有更大垂直間距
-    const center = 0;             // 朝右
+    const center = getFanCenter(parent, rawMap);
     const start = center - fan / 2;
     const end   = center + fan / 2;
 
@@ -177,7 +189,7 @@ window.RugathaLayout = (function () {
     rawMap.forEach(n => {
       if (n.expanded && n.children && n.children.length > 0) {
         const kids = n.children.filter(c => c.visible);
-        placeChildrenFan(n, kids, nodes);
+        placeChildrenFan(n, kids, nodes, rawMap);
       }
     });
 
