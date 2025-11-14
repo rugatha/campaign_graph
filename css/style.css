@@ -48,9 +48,18 @@ h1 {
 }
 
 .node-label {
-  pointer-events: none;
+  pointer-events: auto;
   text-anchor: middle;
   dominant-baseline: central;
+}
+
+.node-label-link {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.node-label-link:hover .node-label {
+  text-decoration: underline;
 }
 
 .level-1 .node-label {
@@ -94,4 +103,28 @@ h1 {
 
 .graph-btn:hover {
   background: #e4dccc;
+}
+
+.node-controls {
+  pointer-events: auto;
+}
+
+.node-btn {
+  cursor: pointer;
+}
+
+.node-btn rect {
+  fill: #f4efe5;
+  stroke: #203028;
+  stroke-width: 1;
+}
+
+.node-btn text {
+  font-size: 11px;
+  font-weight: 700;
+  fill: #203028;
+}
+
+.node-btn:hover rect {
+  fill: #e4dccc;
 }

@@ -19,7 +19,53 @@ window.RugathaRender = (function () {
     return { width, height };
   }
 
-  function renderNodes(viewport, nodeSel, simulation, onClick) {
+  function getNodeBounds(n) {
+    if (n.level === 1) {
+      return { width: 90, height: 90 };
+    }
+    return getRectSize(n);
+  }
+
+  function renderNodeControls(g, node, bounds, handlers) {
+    if (node.level > 2) return;
+
+    const offsetX = bounds.width / 2 + 20;
+    const buttons = [
+      { type: "expand", label: "+", offsetY: -14, handler: handlers.onExpand },
+      { type: "collapse", label: "-", offsetY: 14, handler: handlers.onCollapse }
+    ];
+
+    const controls = g.append("g")
+      .attr("class", "node-controls");
+
+    const btnSel = controls.selectAll("g")
+      .data(buttons)
+      .enter()
+      .append("g")
+      .attr("class", d => "node-btn node-btn-" + d.type)
+      .attr("transform", d => `translate(${offsetX},${d.offsetY})`)
+      .on("click", (event, data) => {
+        event.stopPropagation();
+        if (typeof data.handler === "function") {
+          data.handler(event, node);
+        }
+      });
+
+    btnSel.append("rect")
+      .attr("x", -10)
+      .attr("y", -10)
+      .attr("width", 20)
+      .attr("height", 20)
+      .attr("rx", 4)
+      .attr("ry", 4);
+
+    btnSel.append("text")
+      .attr("text-anchor", "middle")
+      .attr("dominant-baseline", "central")
+      .text(d => d.label);
+  }
+
+  function renderNodes(viewport, nodeSel, simulation, handlers = {}) {
     const enter = nodeSel.enter()
       .append("g")
       .attr("class", d => "level-" + d.level);
@@ -27,30 +73,37 @@ window.RugathaRender = (function () {
     // 畫節點本體（root = icon，其他 = 圓角矩形）
     enter.each(function (d) {
       const g = d3.select(this);
-
+      const bounds = getNodeBounds(d);
       if (d.level === 1) {
-        const size = 90;
         g.append("image")
           .attr("href", ROOT_ICON_URL)
-          .attr("width", size)
-          .attr("height", size)
-          .attr("x", -size / 2)
-          .attr("y", -size / 2);
+          .attr("width", bounds.width)
+          .attr("height", bounds.height)
+          .attr("x", -bounds.width / 2)
+          .attr("y", -bounds.height / 2);
       } else {
-        const r = getRectSize(d);
         g.append("rect")
           .attr("class", "node-rect")
-          .attr("x", -r.width / 2)
-          .attr("y", -r.height / 2)
-          .attr("width", r.width)
-          .attr("height", r.height)
+          .attr("x", -bounds.width / 2)
+          .attr("y", -bounds.height / 2)
+          .attr("width", bounds.width)
+          .attr("height", bounds.height)
           .attr("rx", 18)
           .attr("ry", 18);
       }
+
+      renderNodeControls(g, d, bounds, handlers);
     });
 
-    // 標籤文字（root 不顯示文字）
-    enter.append("text")
+    // 標籤文字改為可點擊超連結（root 無文字）
+    const labelLink = enter.append("a")
+      .attr("class", "node-label-link")
+      .attr("target", "_blank")
+      .attr("rel", "noopener noreferrer")
+      .attr("href", d => d.url || "https://rugatha.com")
+      .on("click", event => event.stopPropagation());
+
+    labelLink.append("text")
       .attr("class", "node-label")
       .text(d => (d.level === 1 ? "" : d.label || ""));
 
@@ -74,7 +127,11 @@ window.RugathaRender = (function () {
     );
 
     // 點擊（展開 / 收合行為從 main.js 傳進來）
-    enter.on("click", onClick);
+    enter.on("click", (event, d) => {
+      if (typeof handlers.onToggle === "function") {
+        handlers.onToggle(event, d);
+      }
+    });
 
     return enter.merge(nodeSel);
   }

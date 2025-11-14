@@ -2,7 +2,9 @@
 // Rugatha campaign hierarchy data
 // 之後要新增 / 調整章節，只要改這個陣列即可
 
-window.CAMPAIGN_GRAPH_DATA = [
+const DEFAULT_NODE_URL = "https://rugatha.com";
+
+const BASE_CAMPAIGN_GRAPH_DATA = [
   // Level 1 (root)
   { id: "rugatha", label: "Rugatha", level: 1, parent: null },
 
@@ -222,3 +224,7 @@ window.CAMPAIGN_GRAPH_DATA = [
     parent: "exp"
   }
 ];
+
+window.CAMPAIGN_GRAPH_DATA = BASE_CAMPAIGN_GRAPH_DATA.map(node =>
+  Object.assign({ url: DEFAULT_NODE_URL }, node)
+);

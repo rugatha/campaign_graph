@@ -105,6 +105,25 @@
     .alphaTarget(0.08)
     .on("tick", ticked);
 
+  function changeNodeExpanded(event, node, desiredState) {
+    if (event && typeof event.stopPropagation === "function") {
+      event.stopPropagation();
+    }
+
+    pendingCenter = node;
+
+    if (!node.children || node.children.length === 0) return;
+
+    const nextState = typeof desiredState === "boolean"
+      ? desiredState
+      : !node.expanded;
+
+    if (node.expanded === nextState) return;
+
+    node.expanded = nextState;
+    update();
+  }
+
   let linkSel = viewport.append("g").attr("class", "edges").selectAll("line");
   let nodeSel = viewport.append("g").attr("class", "nodes").selectAll("g");
 
@@ -129,20 +148,11 @@
     nodeSel = nodeSel.data(nodes, d => d.id);
     nodeSel.exit().remove();
 
-    nodeSel = RugathaRender.renderNodes(
-      viewport,
-      nodeSel,
-      simulation,
-      (event, d) => {
-        event.stopPropagation();
-        pendingCenter = d;
-
-        if (d.children && d.children.length > 0) {
-          d.expanded = !d.expanded;
-          update();
-        }
-      }
-    );
+    nodeSel = RugathaRender.renderNodes(viewport, nodeSel, simulation, {
+      onToggle: (event, d) => changeNodeExpanded(event, d),
+      onExpand: (event, d) => changeNodeExpanded(event, d, true),
+      onCollapse: (event, d) => changeNodeExpanded(event, d, false)
+    });
   }
 
   function ticked() {
