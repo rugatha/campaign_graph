@@ -53,7 +53,7 @@ window.RugathaLayout = (function () {
   function placeChildrenFan(parent, kids) {
     if (!kids || kids.length === 0) return;
 
-    const fan = Math.PI / 2;      // 90 度扇形
+    const fan = Math.PI * 0.95;   // 約 170 度扇形，展開時有更大垂直間距
     const center = 0;             // 朝右
     const start = center - fan / 2;
     const end   = center + fan / 2;
@@ -67,11 +67,12 @@ window.RugathaLayout = (function () {
     const count = kids.length;
 
     kids.forEach((c, i) => {
+      const offset = (i - (count - 1) / 2) * 22; // 階層越多，往上下推開一些
       const t = count === 1 ? 0.5 : i / (count - 1); // 只有一個就置中，多個就平均分
       const angle = start + t * (end - start);
-      const r = baseRadius;
+      const r = baseRadius + Math.min(60, count * 12); // 子數越多半徑越大，避免壓在一起
       const targetX = parent.x + Math.cos(angle) * r;
-      const targetY = parent.y + Math.sin(angle) * r;
+      const targetY = parent.y + Math.sin(angle) * r + offset;
 
       // 只設 initial x/y，不釘死
       if (!isFinite(c.x) || !isFinite(c.y)) {

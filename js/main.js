@@ -68,6 +68,18 @@
 
   const viewport = svg.append("g").attr("id", "rugatha-viewport");
 
+  function getCollisionRadius(node) {
+    const childCount = Array.isArray(node.children)
+      ? node.children.filter(c => c.visible).length
+      : 0;
+    const extra = childCount * 6;
+
+    if (node.level === 1) return 160 + extra;
+    if (node.level === 2) return 110 + extra;
+    if (node.level === 3) return 90 + extra;
+    return 80 + extra;
+  }
+
   let pendingCenter = null;
   let nodes = [];
   let links = [];
@@ -88,7 +100,7 @@
       })
       .strength(0.4))
     .force("charge", d3.forceManyBody().strength(-220))
-    .force("collide", d3.forceCollide().radius(60))
+    .force("collide", d3.forceCollide().radius(d => getCollisionRadius(d)).iterations(2))
     .force("center", d3.forceCenter(width / 2, height / 2))
     .alphaTarget(0.08)
     .on("tick", ticked);
