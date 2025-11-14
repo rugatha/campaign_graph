@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Rugatha Relation Graph</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <style>
+    /* ====== 外層容器 ====== */
+    #rugatha-graph-plugin {
+      width: 100%;
+      max-width: 1000px;
+      height: 600px;
+      margin: 0 auto;
+      box-sizing: border-box;
+    }
+
+    /* ====== SVG 畫布 ====== */
+    #rugatha-graph-svg {
+      width: 100%;
+      height: 100%;
+      background: #ffffff; /* 白底 */
+      border: 1px solid #ccc;
+      cursor: grab;
+      user-select: none;
+    }
+
+    #rugatha-graph-svg.rugatha-panning {
+      cursor: grabbing;
+    }
+
+    /* ====== 節點（橢圓） ====== */
+    .rugatha-node ellipse {
+      fill: #ffffff;   /* 白底 */
+      stroke: #000000; /* 黑線 */
+      stroke-width: 1.5;
+    }
+
+    /* ====== 節點文字 ====== */
+    .rugatha-node text {
+      fill: #000000;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      text-anchor: middle;
+      dominant-baseline: middle;
+      pointer-events: none;
+    }
+
+    /* ====== 不同階層字體大小 ====== */
+    .rugatha-node.level-1 text {
+      font-size: 20px;
+      font-weight: bold;
+    }
+
+    .rugatha-node.level-2 text {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .rugatha-node.level-3 text {
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    /* ====== 關聯線 ====== */
+    .rugatha-edge {
+      stroke: #555555;
+      stroke-width: 1.2;
+    }
+  </style>
+</head>
+<body>
+  <!-- 容器 + SVG 畫布 -->
+  <div id="rugatha-graph-plugin">
+    <svg id="rugatha-graph-svg"></svg>
+  </div>
+
+  <script>
+    (function () {
+      function initRugathaGraph() {
+        const svg = document.getElementById("rugatha-graph-svg");
+        if (!svg) return;
+
+        const SVG_NS = "http://www.w3.org/2000/svg";
+
+        // ===== viewport：所有節點與線條放在這裡，方便平移/縮放 =====
+        const viewport = document.createElementNS(SVG_NS, "g");
+        viewport.setAttribute("id", "rugatha-graph-viewport");
+        svg.appendChild(viewport);
+
+        // ===== 節點資料（含 parent） =====
+        const nodesData = [
+          { id: "rugatha", label: "Rugatha", level: 1, parent: null },
+
+          // Rugatha Plus
+          { id: "plus", label: "Rugatha Plus", level: 2, parent: "rugatha" },
+          { id: "plus-c05", label: "C05", level: 3, parent: "plus" },
+          { id: "plus-c06", label: "C06", level: 3, parent: "plus" },
+
+          // Rugatha lite
+          { id: "lite", label: "Rugatha lite", level: 2, parent: "rugatha" },
+          { id: "lite-c05", label: "C05", level: 3, parent: "lite" },
+          { id: "lite-c06", label: "C06", level: 3, parent: "lite" },
+          { id: "lite-c07", label: "C07", level: 3, parent: "lite" },
+          { id: "lite-c08", label: "C08", level: 3, parent: "lite" },
+
+          // Rugatha WILDS
+          { id: "wilds", label: "Rugatha WILDS", level: 2, parent: "rugatha" },
+          { id: "wilds-c01", label: "C01", level: 3, parent: "wilds" },
+          { id: "wilds-c02", label: "C02", level: 3, parent: "wilds" },
+          { id: "wilds-c03", label: "C03", level: 3, parent: "wilds" },
+          { id: "wilds-c04", label: "C04", level: 3, parent: "wilds" },
+
+          // Rugatha Legends
+          { id: "legends", label: "Rugatha Legends", level: 2, parent: "rugatha" },
+          { id: "legends-o1", label: "O1", level: 3, parent: "legends" },
+          { id: "legends-o2", label: "O2", level: 3, parent: "legends" },
+          { id: "legends-o3", label: "O3", level: 3, parent: "legends" },
+          { id: "legends-o4", label: "O4", level: 3, parent: "legends" },
+
+          // Rugatha Experience
+          { id: "exp", label: "Rugatha Experience", level: 2, parent: "rugatha" },
+          { id: "exp-e1", label: "E1", level: 3, parent: "exp" },
+          { id: "exp-e2", label: "E2", level: 3, parent: "exp" },
+
+          // Rugatha Brown
+          { id: "brown", label: "Rugatha Brown", level: 2, parent: "rugatha" },
+          { id: "brown-c01", label: "C01", level: 3, parent: "brown" },
+          { id: "brown-c02", label: "C02", level: 3, parent: "brown" }
+        ];
+
+        const nodes = [];
+        const nodeMap = new Map();
+        const edges = [];
+
+        // 視圖狀態（平移、縮放）
+        let translate = { x: 120, y: 80 };
+        let scale = 1;
+        let isPanning = false;
+        let panStart = { x: 0, y: 0 };
+
+        // 不同階層橢圓大小
+        function getSizeForLevel(level) {
+          if (level === 1) return { w: 200, h: 70 };
+          if (level === 2) return { w: 180, h: 60 };
+          return { w: 100, h: 40 }; // level 3
+        }
+
+        // 初始化節點物件
+        nodesData.forEach(function (data) {
+          const size = getSizeForLevel(data.level);
+          const node = {
+            id: data.id,
+            label: data.label,
+            level: data.level,
+            parentId: data.parent,
+            children: [],
+            expanded: data.level === 1, // 只有 Rugatha 一開始展開
+            visible: false,
+            x: 0,
+            y: 0,
+            width: size.w,
+            height: size.h,
+            group: null
+          };
+          nodeMap.set(node.id, node);
+          nodes.push(node);
+        });
+
+        // 建立 parent → children 關係
+        nodes.forEach(function (node) {
+          if (!node.parentId) return;
+          const parent = nodeMap.get(node.parentId);
+          if (parent) parent.children.push(node);
+        });
+
+        // 建立 SVG 節點
+        nodes.forEach(function (node) {
+          const g = document.createElementNS(SVG_NS, "g");
+          g.classList.add("rugatha-node", "level-" + node.level);
+
+          const ellipse = document.createElementNS(SVG_NS, "ellipse");
+          ellipse.setAttribute("cx", 0);
+          ellipse.setAttribute("cy", 0);
+          ellipse.setAttribute("rx", node.width / 2);
+          ellipse.setAttribute("ry", node.height / 2);
+
+          const text = document.createElementNS(SVG_NS, "text");
+          text.setAttribute("x", 0);
+          text.setAttribute("y", 0);
+          text.textContent = node.label;
+
+          g.appendChild(ellipse);
+          g.appendChild(text);
+
+          // 點節點：展開/收合 + 置中
+          g.addEventListener("click", function (evt) {
+            evt.stopPropagation();
+            if (node.children && node.children.length > 0) {
+              node.expanded = !node.expanded;
+              layoutAndRender();
+            }
+            centerOnNode(node);
+          });
+
+          // 阻止 mousedown 冒泡，避免當作拖曳背景
+          g.addEventListener("mousedown", function (evt) {
+            evt.stopPropagation();
+          });
+
+          viewport.appendChild(g);
+          node.group = g;
+        });
+
+        // 建立關聯線
+        nodes.forEach(function (node) {
+          if (!node.parentId) return;
+          const parent = nodeMap.get(node.parentId);
+          if (!parent) return;
+          const line = document.createElementNS(SVG_NS, "line");
+          line.classList.add("rugatha-edge");
+          viewport.insertBefore(line, viewport.firstChild);
+          edges.push({ parent: parent, child: node, line: line });
+        });
+
+        // 套用平移/縮放
+        function applyTransform() {
+          viewport.setAttribute(
+            "transform",
+            "translate(" + translate.x + "," + translate.y + ") scale(" + scale + ")"
+          );
+        }
+
+        // 節點置中
+        function centerOnNode(node) {
+          if (!node) return;
+          const rect = svg.getBoundingClientRect();
+          const svgWidth = rect.width;
+          const svgHeight = rect.height;
+
+          translate.x = svgWidth / 2 - scale * node.x;
+          translate.y = svgHeight / 2 - scale * node.y;
+          applyTransform();
+        }
+
+        // 排版 + 更新畫面
+        function layoutAndRender() {
+          // 1) 可見性
+          nodes.forEach(function (node) {
+            if (node.level === 1) {
+              node.visible = true;
+            } else {
+              const parent = nodeMap.get(node.parentId);
+              node.visible = parent && parent.visible && parent.expanded;
+            }
+          });
+
+          // 2) 排版
+          const levelX = { 1: 80, 2: 320, 3: 600 }; // 左→右
+          const levelStartY = 40;
+          const parentGapY = 100; // Level 1 & 2 垂直間距
+          const childGapY = 40;   // 子節點圍繞母節點的間距
+
+          const levelCounters = { 1: 0, 2: 0 };
+
+          // (a) Level 1 & 2
+          nodes.forEach(function (node) {
+            if (!node.group) return;
+
+            if (!node.visible) {
+              node.group.style.display = "none";
+              return;
+            }
+
+            if (node.level === 3) return; // Level 3 後面再排
+
+            const lvl = node.level;
+            const idx = levelCounters[lvl]++;
+            node.x = levelX[lvl];
+            node.y = levelStartY + idx * parentGapY;
+
+            node.group.style.display = "block";
+            node.group.setAttribute(
+              "transform",
+              "translate(" + node.x + "," + node.y + ")"
+            );
+          });
+
+          // (b) Level 3：以母節點為中心上下展開
+          const childrenByParent = new Map();
+          nodes.forEach(function (node) {
+            if (node.level !== 3 || !node.visible) return;
+            const parentId = node.parentId;
+            if (!childrenByParent.has(parentId)) {
+              childrenByParent.set(parentId, []);
+            }
+            childrenByParent.get(parentId).push(node);
+          });
+
+          childrenByParent.forEach(function (children, parentId) {
+            const parent = nodeMap.get(parentId);
+            if (!parent) return;
+            const n = children.length;
+            if (n === 0) return;
+
+            children.forEach(function (child, i) {
+              const offsetIndex = i - (n - 1) / 2; // 以 0 為中心
+              child.x = levelX[3];
+              child.y = parent.y + offsetIndex * childGapY;
+
+              child.group.style.display = "block";
+              child.group.setAttribute(
+                "transform",
+                "translate(" + child.x + "," + child.y + ")"
+              );
+            });
+          });
+
+          // (c) 更新線條
+          edges.forEach(function (edge) {
+            const parent = edge.parent;
+            const child = edge.child;
+            if (parent.visible && child.visible) {
+              edge.line.style.display = "block";
+              edge.line.setAttribute("x1", parent.x);
+              edge.line.setAttribute("y1", parent.y);
+              edge.line.setAttribute("x2", child.x);
+              edge.line.setAttribute("y2", child.y);
+            } else {
+              edge.line.style.display = "none";
+            }
+          });
+        }
+
+        // 背景平移（拖曳）
+        svg.addEventListener("mousedown", function (evt) {
+          isPanning = true;
+          panStart.x = evt.clientX;
+          panStart.y = evt.clientY;
+          svg.classList.add("rugatha-panning");
+        });
+
+        window.addEventListener("mousemove", function (evt) {
+          if (!isPanning) return;
+          const dx = evt.clientX - panStart.x;
+          const dy = evt.clientY - panStart.y;
+          panStart.x = evt.clientX;
+          panStart.y = evt.clientY;
+
+          translate.x += dx;
+          translate.y += dy;
+          applyTransform();
+        });
+
+        window.addEventListener("mouseup", function () {
+          isPanning = false;
+          svg.classList.remove("rugatha-panning");
+        });
+
+        // 滾輪縮放
+        svg.addEventListener(
+          "wheel",
+          function (evt) {
+            evt.preventDefault();
+            const delta = evt.deltaY > 0 ? 0.9 : 1.1;
+            const newScale = scale * delta;
+            if (newScale < 0.3 || newScale > 3) return;
+            scale = newScale;
+            applyTransform();
+          },
+          { passive: false }
+        );
+
+        // 初始排版
+        layoutAndRender();
+        applyTransform();
+      }
+
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", initRugathaGraph);
+      } else {
+        initRugathaGraph();
+      }
+    })();
+  </script>
+</body>
+</html>
