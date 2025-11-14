@@ -14,7 +14,7 @@ h1 {
 
 #rugatha-graph-plugin {
   width: 100%;
-  height: calc(100vh - 60px);
+  height: calc(100vh - 50px);
 }
 
 #rugatha-graph-svg {
