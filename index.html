@@ -31,7 +31,7 @@
     #rugatha-graph-svg {
       width: 100%;
       height: 100%;
-      background: #445f56; /* 與頁面同色 */
+      background: #445f56;
       cursor: grab;
       user-select: none;
     }
@@ -47,23 +47,22 @@
       stroke-opacity: 0.85;
     }
 
-    /* 圓角矩形（寬高由 JS 控制） */
+    /* 節點圓角矩形（尺寸由 JS 控制） */
     .node-rect {
       stroke: #203028;
       stroke-width: 1.4;
     }
 
     .level-2 .node-rect {
-      fill: #c6dfd2; /* 次階：柔和綠灰 */
+      fill: #c6dfd2; /* 柔和綠灰 */
     }
 
     .level-3 .node-rect {
-      fill: #f4efe5; /* 第三階：奶油白 */
+      fill: #f4efe5; /* 奶油白 */
     }
 
-    /* 文字 */
+    /* 節點文字 */
     .node-label {
-      fill: #f9fafb;
       pointer-events: none;
       text-anchor: middle;
       dominant-baseline: central;
@@ -72,12 +71,13 @@
     .level-1 .node-label {
       font-size: 14px;
       font-weight: 800;
+      fill: #f9fafb;
     }
 
     .level-2 .node-label {
       font-size: 12px;
       font-weight: 700;
-      fill: #203028; /* 在淡底上換成深色文字比較清楚 */
+      fill: #203028; /* 在淡底上用深字色 */
     }
 
     .level-3 .node-label {
@@ -106,6 +106,7 @@
         "https://rugatha.wordpress.com/wp-content/uploads/2025/05/cropped-e69caae591bde5908d-1_e5b7a5e4bd9ce58d80e59f9f-1-1.png";
 
       const rawData = window.CAMPAIGN_GRAPH_DATA || [];
+      let pendingCenter = null; // 用來記錄「下一次 tick 要置中的節點」
 
       function init() {
         const svg = d3.select("#rugatha-graph-svg");
@@ -116,7 +117,7 @@
 
         const viewport = svg.append("g").attr("id", "rugatha-viewport");
 
-        // 建 node map
+        // 建立 node map
         const nodeById = new Map();
         rawData.forEach(d => {
           nodeById.set(d.id, {
@@ -128,7 +129,9 @@
             expanded: d.level === 1, // root 預設展開
             visible: false,
             x: width / 2,
-            y: height / 2
+            y: height / 2,
+            fx: null,
+            fy: null
           });
         });
 
@@ -142,7 +145,10 @@
         // 根據 expanded 決定 visible
         function computeVisibility() {
           nodeById.forEach(n => (n.visible = false));
-          nodeById.forEach(n => { if (!n.parent) n.visible = true; });
+          // root 可見
+          nodeById.forEach(n => {
+            if (!n.parent) n.visible = true;
+          });
 
           let changed = true;
           while (changed) {
@@ -191,9 +197,18 @@
         function buildGraphData() {
           computeVisibility();
 
+          // 先清除所有 fx/fy（避免之前展開的殘留）
+          nodeById.forEach(n => {
+            n.fx = null;
+            n.fy = null;
+          });
+
           const nodes = [];
           const links = [];
-          nodeById.forEach(n => { if (n.visible) nodes.push(n); });
+
+          nodeById.forEach(n => {
+            if (n.visible) nodes.push(n);
+          });
           nodeById.forEach(n => {
             if (!n.visible || !n.parent) return;
             const p = nodeById.get(n.parent);
@@ -227,14 +242,20 @@
           .alphaTarget(0.15)
           .on("tick", ticked);
 
-        let linkSel = viewport.append("g").attr("class", "edges").selectAll("line");
-        let nodeSel = viewport.append("g").attr("class", "nodes").selectAll("g");
+        let linkSel = viewport.append("g")
+          .attr("class", "edges")
+          .selectAll("line");
+
+        let nodeSel = viewport.append("g")
+          .attr("class", "nodes")
+          .selectAll("g");
 
         function updateGraph() {
           ({ nodes, links } = buildGraphData());
+
           simulation.nodes(nodes);
           simulation.force("link").links(links);
-          simulation.alpha(0.5).restart(); // 動畫啟動，但比之前更溫和
+          simulation.alpha(0.5).restart(); // 動畫啟動，但較為平順
 
           // edges
           linkSel = linkSel.data(links, d => d.source.id + "-" + d.target.id);
@@ -287,17 +308,18 @@
             .attr("class", "node-label")
             .text(d => (d.level === 1 ? "" : d.label));
 
-          // 點節點：展開/收合 + 同步視角移動
+          // 點節點：紀錄 pendingCenter，展開 / 收合後在 tick 中置中
           enter.on("click", (event, d) => {
             event.stopPropagation();
 
-            // 先觸發視角移動（以目前座標為中心），動畫 350ms
-            centerOnNode(d, 350);
+            // 先記錄要置中的節點
+            pendingCenter = d;
 
             if (d.children && d.children.length > 0) {
               d.expanded = !d.expanded;
               updateGraph();
             }
+            // 沒子節點：不需要 updateGraph，pendingCenter 會在下一個 tick 處理
           });
 
           nodeSel = enter.merge(nodeSel);
@@ -311,6 +333,12 @@
             .attr("y2", d => d.target.y);
 
           nodeSel.attr("transform", d => `translate(${d.x},${d.y})`);
+
+          // 如果有 pendingCenter，在第一個 tick 執行置中，避免「先變位再移動」的跳動感
+          if (pendingCenter) {
+            centerOnNode(pendingCenter, 350);
+            pendingCenter = null;
+          }
         }
 
         function dragstarted(event, d) {
@@ -351,7 +379,7 @@
             .call(zoom.transform, t);
         }
 
-        // 點背景重置視角（也用 350ms）
+        // 點背景重置視角
         svg.on("click", () => {
           const t = d3.zoomIdentity.translate(width / 2, height / 2).scale(1);
           svg.transition().duration(350).call(zoom.transform, t);
