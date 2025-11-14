@@ -125,17 +125,22 @@ window.RugathaLayout = (function () {
     const dyToParent = grand.y - parent.y;
     if (Math.abs(dxToParent) < 1e-2 && Math.abs(dyToParent) < 1e-2) return 0;
 
-    // atan2 得到朝向父層的角度
-    const towardParent = Math.atan2(dyToParent, dxToParent);
-    // 加 PI (180°) 讓扇形朝反方向張開
-    return towardParent;
+    // atan2 得到朝向父層的角度（第 2 層保持這個方向，第 3 層之後再調整）
+    let centerAngle = Math.atan2(dyToParent, dxToParent);
+
+    // 若 parent.level === 2，表示即將繪製第 3 層；將扇形整體轉 180°
+    if (parent.level === 2) {
+      centerAngle += Math.PI;
+    }
+
+    return centerAngle;
   }
 
   function placeChildrenFan(parent, kids, occupiedNodes, rawMap) {
     if (!kids || kids.length === 0) return;
 
     const fan = Math.PI * 0.95;   // 約 170 度扇形，展開時有更大垂直間距
-    const center = getFanCenter(parent, rawMap) + Math.PI; // 依前面函式決定扇形中心角度
+    const center = getFanCenter(parent, rawMap); // 依前面函式決定扇形中心角度
     const start = center - fan / 2;              // 扇形起始角
     const end   = center + fan / 2;              // 扇形結束角
 
