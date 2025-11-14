@@ -1,9 +1,3 @@
-
----
-
-## index.html 內容
-
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -84,6 +78,10 @@
     <svg id="rugatha-graph-svg"></svg>
   </div>
 
+  <!-- 先載入階層資料 -->
+  <script src="graph-data.js"></script>
+
+  <!-- 再載入主程式，使用上面的資料 -->
   <script>
     (function () {
       function initRugathaGraph() {
@@ -97,50 +95,16 @@
         viewport.setAttribute("id", "rugatha-graph-viewport");
         svg.appendChild(viewport);
 
-        /* ====== Data: nodes with parent relationship ======
-           level 1: # Rugatha
-           level 2: ## Rugatha Plus / lite / WILDS / Legends / Experience / Brown
-           level 3: ### Cxx / OX / EX
-        */
-        const nodesData = [
-          { id: "rugatha", label: "Rugatha", level: 1, parent: null },
-
-          // Rugatha Plus
-          { id: "plus", label: "Rugatha Plus", level: 2, parent: "rugatha" },
-          { id: "plus-c05", label: "C05", level: 3, parent: "plus" },
-          { id: "plus-c06", label: "C06", level: 3, parent: "plus" },
-
-          // Rugatha lite
-          { id: "lite", label: "Rugatha lite", level: 2, parent: "rugatha" },
-          { id: "lite-c05", label: "C05", level: 3, parent: "lite" },
-          { id: "lite-c06", label: "C06", level: 3, parent: "lite" },
-          { id: "lite-c07", label: "C07", level: 3, parent: "lite" },
-          { id: "lite-c08", label: "C08", level: 3, parent: "lite" },
-
-          // Rugatha WILDS
-          { id: "wilds", label: "Rugatha WILDS", level: 2, parent: "rugatha" },
-          { id: "wilds-c01", label: "C01", level: 3, parent: "wilds" },
-          { id: "wilds-c02", label: "C02", level: 3, parent: "wilds" },
-          { id: "wilds-c03", label: "C03", level: 3, parent: "wilds" },
-          { id: "wilds-c04", label: "C04", level: 3, parent: "wilds" },
-
-          // Rugatha Legends
-          { id: "legends", label: "Rugatha Legends", level: 2, parent: "rugatha" },
-          { id: "legends-o1", label: "O1", level: 3, parent: "legends" },
-          { id: "legends-o2", label: "O2", level: 3, parent: "legends" },
-          { id: "legends-o3", label: "O3", level: 3, parent: "legends" },
-          { id: "legends-o4", label: "O4", level: 3, parent: "legends" },
-
-          // Rugatha Experience
-          { id: "exp", label: "Rugatha Experience", level: 2, parent: "rugatha" },
-          { id: "exp-e1", label: "E1", level: 3, parent: "exp" },
-          { id: "exp-e2", label: "E2", level: 3, parent: "exp" },
-
-          // Rugatha Brown
-          { id: "brown", label: "Rugatha Brown", level: 2, parent: "rugatha" },
-          { id: "brown-c01", label: "C01", level: 3, parent: "brown" },
-          { id: "brown-c02", label: "C02", level: 3, parent: "brown" }
-        ];
+        /* ====== Use data from graph-data.js ====== */
+        const nodesData = (window.CAMPAIGN_GRAPH_DATA || []).map(function (d) {
+          // 確保欄位名稱一致：用 parent → parentId
+          return {
+            id: d.id,
+            label: d.label,
+            level: d.level,
+            parent: d.parent
+          };
+        });
 
         const nodes = [];
         const nodeMap = new Map();
@@ -168,7 +132,7 @@
             level: data.level,
             parentId: data.parent,
             children: [],
-            expanded: data.level === 1, // root expanded, descendants depend on it
+            expanded: data.level === 1, // root expanded by default
             visible: false,
             x: 0,
             y: 0,
@@ -258,7 +222,7 @@
 
         /* ====== Layout and render ====== */
         function layoutAndRender() {
-          // 1) Visibility: a node is visible only if all ancestors are expanded
+          // 1) Visibility: visible only if all ancestors are expanded
           nodes.forEach(function (node) {
             if (node.level === 1) {
               node.visible = true;
@@ -276,7 +240,7 @@
 
           const levelCounters = { 1: 0, 2: 0 };
 
-          // (a) Place level 1 and 2 nodes (top-down)
+          // (a) place level 1 & 2
           nodes.forEach(function (node) {
             if (!node.group) return;
 
@@ -285,7 +249,7 @@
               return;
             }
 
-            if (node.level === 3) return; // skip for now
+            if (node.level === 3) return;
 
             const lvl = node.level;
             const idx = levelCounters[lvl]++;
@@ -299,7 +263,7 @@
             );
           });
 
-          // (b) Place level 3 nodes around their parent vertically
+          // (b) place level 3 around parent vertically
           const childrenByParent = new Map();
           nodes.forEach(function (node) {
             if (node.level !== 3 || !node.visible) return;
@@ -317,7 +281,7 @@
             if (n === 0) return;
 
             children.forEach(function (child, i) {
-              const offsetIndex = i - (n - 1) / 2; // centered around 0
+              const offsetIndex = i - (n - 1) / 2; // centered around parent
               child.x = levelX[3];
               child.y = parent.y + offsetIndex * childGapY;
 
@@ -329,7 +293,7 @@
             });
           });
 
-          // (c) Update edges
+          // (c) update edges
           edges.forEach(function (edge) {
             const parent = edge.parent;
             const child = edge.child;
