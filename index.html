@@ -2,25 +2,36 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Rugatha Campaign Graph</title>
+  <title>Rugatha Campaign Graph (Neo4j style)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <style>
-    /* ====== Outer container ====== */
+    body {
+      margin: 0;
+      background: #0b0d11;
+      color: #e5e7eb;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    h1 {
+      text-align: center;
+      margin: 16px 0 8px;
+      font-size: 20px;
+      font-weight: 600;
+      color: #f9fafb;
+    }
+
     #rugatha-graph-plugin {
       width: 100%;
-      max-width: 1000px;
-      height: 600px;
-      margin: 0 auto;
+      height: calc(100vh - 60px);
+      max-height: 700px;
       box-sizing: border-box;
     }
 
-    /* ====== SVG canvas ====== */
     #rugatha-graph-svg {
       width: 100%;
       height: 100%;
-      background: #ffffff; /* white background */
-      border: 1px solid #ccc;
+      background: #05070a; /* Neo4j-style dark background */
       cursor: grab;
       user-select: none;
     }
@@ -29,334 +40,316 @@
       cursor: grabbing;
     }
 
-    /* ====== Nodes (ellipses) ====== */
-    .rugatha-node ellipse {
-      fill: #ffffff;   /* white fill */
-      stroke: #000000; /* black stroke */
-      stroke-width: 1.5;
+    /* edges */
+    .rugatha-edge {
+      stroke: #374151;
+      stroke-width: 1.2;
+      stroke-opacity: 0.8;
     }
 
-    /* ====== Node labels ====== */
+    /* nodes */
+    .rugatha-node circle {
+      stroke: #111827;
+      stroke-width: 1.2;
+    }
+
+    .rugatha-node.level-1 circle {
+      r: 26;
+      fill: #10b981; /* teal */
+    }
+
+    .rugatha-node.level-2 circle {
+      r: 22;
+      fill: #3b82f6; /* blue */
+    }
+
+    .rugatha-node.level-3 circle {
+      r: 18;
+      fill: #9ca3af; /* gray */
+    }
+
     .rugatha-node text {
-      fill: #000000;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      fill: #f9fafb;
+      font-size: 10px;
+      pointer-events: none;
       text-anchor: middle;
       dominant-baseline: middle;
-      pointer-events: none;
     }
 
-    /* ====== Font sizes by level ====== */
     .rugatha-node.level-1 text {
-      font-size: 20px;
-      font-weight: bold;
+      font-size: 12px;
+      font-weight: 700;
     }
 
     .rugatha-node.level-2 text {
-      font-size: 16px;
+      font-size: 11px;
       font-weight: 600;
     }
 
     .rugatha-node.level-3 text {
-      font-size: 14px;
+      font-size: 10px;
       font-weight: 500;
-    }
-
-    /* ====== Edges ====== */
-    .rugatha-edge {
-      stroke: #555555;
-      stroke-width: 1.2;
     }
   </style>
 </head>
 <body>
-  <h1 style="text-align:center; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
-    Rugatha Campaign Graph
-  </h1>
+  <h1>Rugatha Campaign Graph</h1>
 
-  <!-- Container + SVG canvas -->
   <div id="rugatha-graph-plugin">
     <svg id="rugatha-graph-svg"></svg>
   </div>
 
-  <!-- 先載入階層資料 -->
+  <!-- 1) campaign hierarchy data -->
   <script src="graph-data.js"></script>
 
-  <!-- 再載入主程式，使用上面的資料 -->
+  <!-- 2) D3.js from CDN -->
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+
+  <!-- 3) main script: force-directed Neo4j-style graph -->
   <script>
     (function () {
-      function initRugathaGraph() {
-        const svg = document.getElementById("rugatha-graph-svg");
-        if (!svg) return;
+      const rawData = (window.CAMPAIGN_GRAPH_DATA || []);
 
-        const SVG_NS = "http://www.w3.org/2000/svg";
+      function init() {
+        const svg = d3.select("#rugatha-graph-svg");
+        if (svg.empty()) return;
 
-        /* ====== Viewport group: everything (nodes + edges) goes inside here ====== */
-        const viewport = document.createElementNS(SVG_NS, "g");
-        viewport.setAttribute("id", "rugatha-graph-viewport");
-        svg.appendChild(viewport);
+        const width = svg.node().clientWidth;
+        const height = svg.node().clientHeight;
 
-        /* ====== Use data from graph-data.js ====== */
-        const nodesData = (window.CAMPAIGN_GRAPH_DATA || []).map(function (d) {
-          // 確保欄位名稱一致：用 parent → parentId
-          return {
+        // zoom / pan group
+        const viewport = svg.append("g").attr("id", "rugatha-graph-viewport");
+
+        // build node map (one object per id)
+        const nodeById = new Map();
+        rawData.forEach(d => {
+          nodeById.set(d.id, {
             id: d.id,
             label: d.label,
             level: d.level,
-            parent: d.parent
-          };
-        });
-
-        const nodes = [];
-        const nodeMap = new Map();
-        const edges = [];
-
-        /* ====== View state (pan, zoom) ====== */
-        let translate = { x: 120, y: 80 };
-        let scale = 1;
-        let isPanning = false;
-        let panStart = { x: 0, y: 0 };
-
-        /* ====== Node sizes per level ====== */
-        function getSizeForLevel(level) {
-          if (level === 1) return { w: 200, h: 70 };
-          if (level === 2) return { w: 180, h: 60 };
-          return { w: 100, h: 40 }; // level 3
-        }
-
-        /* ====== Initialize node objects ====== */
-        nodesData.forEach(function (data) {
-          const size = getSizeForLevel(data.level);
-          const node = {
-            id: data.id,
-            label: data.label,
-            level: data.level,
-            parentId: data.parent,
+            parent: d.parent,
             children: [],
-            expanded: data.level === 1, // root expanded by default
+            expanded: d.level === 1, // root expanded by default
             visible: false,
-            x: 0,
-            y: 0,
-            width: size.w,
-            height: size.h,
-            group: null
-          };
-          nodeMap.set(node.id, node);
-          nodes.push(node);
-        });
-
-        // Build parent → children links
-        nodes.forEach(function (node) {
-          if (!node.parentId) return;
-          const parent = nodeMap.get(node.parentId);
-          if (parent) parent.children.push(node);
-        });
-
-        /* ====== Create SVG nodes: <g> + <ellipse> + <text> ====== */
-        nodes.forEach(function (node) {
-          const g = document.createElementNS(SVG_NS, "g");
-          g.classList.add("rugatha-node", "level-" + node.level);
-
-          const ellipse = document.createElementNS(SVG_NS, "ellipse");
-          ellipse.setAttribute("cx", 0);
-          ellipse.setAttribute("cy", 0);
-          ellipse.setAttribute("rx", node.width / 2);
-          ellipse.setAttribute("ry", node.height / 2);
-
-          const text = document.createElementNS(SVG_NS, "text");
-          text.setAttribute("x", 0);
-          text.setAttribute("y", 0);
-          text.textContent = node.label;
-
-          g.appendChild(ellipse);
-          g.appendChild(text);
-
-          // Click: toggle children (if any) and center on node
-          g.addEventListener("click", function (evt) {
-            evt.stopPropagation();
-            if (node.children && node.children.length > 0) {
-              node.expanded = !node.expanded;
-              layoutAndRender();
-            }
-            centerOnNode(node);
+            x: width / 2,
+            y: height / 2
           });
-
-          // Prevent panning start when clicking on a node
-          g.addEventListener("mousedown", function (evt) {
-            evt.stopPropagation();
-          });
-
-          viewport.appendChild(g);
-          node.group = g;
         });
 
-        /* ====== Create edges (parent → child) ====== */
-        nodes.forEach(function (node) {
-          if (!node.parentId) return;
-          const parent = nodeMap.get(node.parentId);
-          if (!parent) return;
-          const line = document.createElementNS(SVG_NS, "line");
-          line.classList.add("rugatha-edge");
-          viewport.insertBefore(line, viewport.firstChild);
-          edges.push({ parent: parent, child: node, line: line });
+        // build children list
+        nodeById.forEach(node => {
+          if (node.parent) {
+            const parent = nodeById.get(node.parent);
+            if (parent) parent.children.push(node);
+          }
         });
 
-        /* ====== Apply pan/zoom transform ====== */
-        function applyTransform() {
-          viewport.setAttribute(
-            "transform",
-            "translate(" + translate.x + "," + translate.y + ") scale(" + scale + ")"
-          );
-        }
-
-        /* ====== Center a node in the viewport ====== */
-        function centerOnNode(node) {
-          if (!node) return;
-          const rect = svg.getBoundingClientRect();
-          const svgWidth = rect.width;
-          const svgHeight = rect.height;
-
-          translate.x = svgWidth / 2 - scale * node.x;
-          translate.y = svgHeight / 2 - scale * node.y;
-          applyTransform();
-        }
-
-        /* ====== Layout and render ====== */
-        function layoutAndRender() {
-          // 1) Visibility: visible only if all ancestors are expanded
-          nodes.forEach(function (node) {
-            if (node.level === 1) {
+        // compute visibility based on expanded ancestors
+        function computeVisibility() {
+          nodeById.forEach(n => (n.visible = false));
+          // find roots (no parent)
+          nodeById.forEach(node => {
+            if (!node.parent) {
               node.visible = true;
-            } else {
-              const parent = nodeMap.get(node.parentId);
-              node.visible = parent && parent.visible && parent.expanded;
             }
           });
 
-          // 2) Layout: left-to-right by level; level 3 centered around its parent vertically
-          const levelX = { 1: 80, 2: 320, 3: 600 };
-          const levelStartY = 40;
-          const parentGapY = 100;
-          const childGapY = 40;
-
-          const levelCounters = { 1: 0, 2: 0 };
-
-          // (a) place level 1 & 2
-          nodes.forEach(function (node) {
-            if (!node.group) return;
-
-            if (!node.visible) {
-              node.group.style.display = "none";
-              return;
-            }
-
-            if (node.level === 3) return;
-
-            const lvl = node.level;
-            const idx = levelCounters[lvl]++;
-            node.x = levelX[lvl];
-            node.y = levelStartY + idx * parentGapY;
-
-            node.group.style.display = "block";
-            node.group.setAttribute(
-              "transform",
-              "translate(" + node.x + "," + node.y + ")"
-            );
-          });
-
-          // (b) place level 3 around parent vertically
-          const childrenByParent = new Map();
-          nodes.forEach(function (node) {
-            if (node.level !== 3 || !node.visible) return;
-            const parentId = node.parentId;
-            if (!childrenByParent.has(parentId)) {
-              childrenByParent.set(parentId, []);
-            }
-            childrenByParent.get(parentId).push(node);
-          });
-
-          childrenByParent.forEach(function (children, parentId) {
-            const parent = nodeMap.get(parentId);
-            if (!parent) return;
-            const n = children.length;
-            if (n === 0) return;
-
-            children.forEach(function (child, i) {
-              const offsetIndex = i - (n - 1) / 2; // centered around parent
-              child.x = levelX[3];
-              child.y = parent.y + offsetIndex * childGapY;
-
-              child.group.style.display = "block";
-              child.group.setAttribute(
-                "transform",
-                "translate(" + child.x + "," + child.y + ")"
-              );
+          // BFS from each visible node
+          let changed = true;
+          while (changed) {
+            changed = false;
+            nodeById.forEach(node => {
+              if (!node.parent) return;
+              const parent = nodeById.get(node.parent);
+              const shouldBeVisible =
+                parent && parent.visible && parent.expanded;
+              if (shouldBeVisible && !node.visible) {
+                node.visible = true;
+                changed = true;
+              }
             });
-          });
-
-          // (c) update edges
-          edges.forEach(function (edge) {
-            const parent = edge.parent;
-            const child = edge.child;
-            if (parent.visible && child.visible) {
-              edge.line.style.display = "block";
-              edge.line.setAttribute("x1", parent.x);
-              edge.line.setAttribute("y1", parent.y);
-              edge.line.setAttribute("x2", child.x);
-              edge.line.setAttribute("y2", child.y);
-            } else {
-              edge.line.style.display = "none";
-            }
-          });
+          }
         }
 
-        /* ====== Panning (dragging background) ====== */
-        svg.addEventListener("mousedown", function (evt) {
-          isPanning = true;
-          panStart.x = evt.clientX;
-          panStart.y = evt.clientY;
-          svg.classList.add("rugatha-panning");
+        function buildGraphData() {
+          computeVisibility();
+
+          const nodes = [];
+          const links = [];
+
+          nodeById.forEach(node => {
+            if (node.visible) nodes.push(node);
+          });
+
+          nodeById.forEach(node => {
+            if (!node.visible || !node.parent) return;
+            const parent = nodeById.get(node.parent);
+            if (parent && parent.visible) {
+              links.push({ source: parent, target: node });
+            }
+          });
+
+          return { nodes, links };
+        }
+
+        let { nodes, links } = buildGraphData();
+
+        /* ---- D3 force simulation ---- */
+        const simulation = d3
+          .forceSimulation(nodes)
+          .force(
+            "link",
+            d3
+              .forceLink(links)
+              .id(d => d.id)
+              .distance(120)
+              .strength(0.9)
+          )
+          .force(
+            "charge",
+            d3.forceManyBody().strength(-350)
+          )
+          .force(
+            "center",
+            d3.forceCenter(width / 2, height / 2)
+          )
+          .force("collision", d3.forceCollide().radius(d => {
+            if (d.level === 1) return 36;
+            if (d.level === 2) return 32;
+            return 28;
+          }));
+
+        // edges
+        let linkSel = viewport
+          .append("g")
+          .attr("class", "edges")
+          .selectAll("line");
+
+        // nodes (group: circle + text)
+        let nodeSel = viewport
+          .append("g")
+          .attr("class", "nodes")
+          .selectAll("g");
+
+        function updateGraph() {
+          ({ nodes, links } = buildGraphData());
+
+          simulation.nodes(nodes);
+          simulation.force("link").links(links);
+
+          // join edges
+          linkSel = linkSel
+            .data(links, d => d.source.id + "-" + d.target.id);
+
+          linkSel.exit().remove();
+
+          const linkEnter = linkSel
+            .enter()
+            .append("line")
+            .attr("class", "rugatha-edge");
+
+          linkSel = linkEnter.merge(linkSel);
+
+          // join nodes
+          nodeSel = nodeSel.data(nodes, d => d.id);
+
+          nodeSel.exit().remove();
+
+          const nodeEnter = nodeSel
+            .enter()
+            .append("g")
+            .attr("class", d => "rugatha-node level-" + d.level)
+            .call(
+              d3
+                .drag()
+                .on("start", dragstarted)
+                .on("drag", dragged)
+                .on("end", dragended)
+            );
+
+          nodeEnter
+            .append("circle");
+
+          nodeEnter
+            .append("text")
+            .text(d => d.label);
+
+          nodeEnter.on("click", (event, d) => {
+            event.stopPropagation();
+            if (d.children && d.children.length > 0) {
+              d.expanded = !d.expanded;
+              updateGraph();
+            }
+            centerOnNode(d);
+          });
+
+          nodeSel = nodeEnter.merge(nodeSel);
+
+          simulation.alpha(1).restart();
+        }
+
+        simulation.on("tick", () => {
+          linkSel
+            .attr("x1", d => d.source.x)
+            .attr("y1", d => d.source.y)
+            .attr("x2", d => d.target.x)
+            .attr("y2", d => d.target.y);
+
+          nodeSel.attr("transform", d => `translate(${d.x},${d.y})`);
         });
 
-        window.addEventListener("mousemove", function (evt) {
-          if (!isPanning) return;
-          const dx = evt.clientX - panStart.x;
-          const dy = evt.clientY - panStart.y;
-          panStart.x = evt.clientX;
-          panStart.y = evt.clientY;
+        // drag handlers
+        function dragstarted(event, d) {
+          if (!event.active) simulation.alphaTarget(0.3).restart();
+          d.fx = d.x;
+          d.fy = d.y;
+        }
 
-          translate.x += dx;
-          translate.y += dy;
-          applyTransform();
+        function dragged(event, d) {
+          d.fx = event.x;
+          d.fy = event.y;
+        }
+
+        function dragended(event, d) {
+          if (!event.active) simulation.alphaTarget(0);
+          d.fx = event.x;
+          d.fy = event.y;
+        }
+
+        // zoom / pan
+        const zoom = d3.zoom()
+          .scaleExtent([0.3, 3])
+          .on("zoom", (event) => {
+            viewport.attr("transform", event.transform);
+          });
+
+        svg.call(zoom);
+
+        // center viewport on a node
+        function centerOnNode(node) {
+          const t = d3.zoomIdentity
+            .translate(width / 2 - node.x, height / 2 - node.y)
+            .scale(1);
+
+          svg.transition()
+            .duration(400)
+            .call(zoom.transform, t);
+        }
+
+        // background click: just recentre all
+        svg.on("click", () => {
+          const t = d3.zoomIdentity.translate(width / 2, height / 2).scale(1);
+          svg.transition().duration(400).call(zoom.transform, t);
         });
 
-        window.addEventListener("mouseup", function () {
-          isPanning = false;
-          svg.classList.remove("rugatha-panning");
-        });
-
-        /* ====== Mouse wheel zoom ====== */
-        svg.addEventListener(
-          "wheel",
-          function (evt) {
-            evt.preventDefault();
-            const delta = evt.deltaY > 0 ? 0.9 : 1.1;
-            const newScale = scale * delta;
-            if (newScale < 0.3 || newScale > 3) return;
-            scale = newScale;
-            applyTransform();
-          },
-          { passive: false }
-        );
-
-        // Initial layout
-        layoutAndRender();
-        applyTransform();
+        // initial render
+        updateGraph();
       }
 
       if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", initRugathaGraph);
+        document.addEventListener("DOMContentLoaded", init);
       } else {
-        initRugathaGraph();
+        init();
       }
     })();
   </script>
