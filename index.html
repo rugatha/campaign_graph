@@ -47,23 +47,21 @@
       stroke-opacity: 0.8;
     }
 
-    /* ===== 節點橢圓填色與框線（半徑改由 JS 控制） ===== */
-    .node-ellipse {
+    /* ===== 節點的圓角矩形樣式（寬高由 JS 控制） ===== */
+    .node-rect {
       stroke: #111827;
       stroke-width: 1.4;
     }
 
-    .level-1 .node-ellipse {
-      fill: #10b981; /* root: teal 綠 */
-    }
-
-    .level-2 .node-ellipse {
+    .level-2 .node-rect {
       fill: #3b82f6; /* 第二層: 藍色 */
     }
 
-    .level-3 .node-ellipse {
+    .level-3 .node-rect {
       fill: #9ca3af; /* 第三層: 灰色 */
     }
+
+    /* Level 1 用圖片，不使用 rect，因此不在這裡設 fill */
 
     /* ===== 節點文字 ===== */
     .node-label {
@@ -74,7 +72,7 @@
     }
 
     .level-1 .node-label {
-      font-size: 14px;   /* 明顯最大 */
+      font-size: 14px;
       font-weight: 800;
     }
 
@@ -102,9 +100,12 @@
   <!-- 2) D3.js -->
   <script src="https://d3js.org/d3.v7.min.js"></script>
 
-  <!-- 3) 主程式：Force-directed + 橢圓 + 階層感 -->
+  <!-- 3) 主程式：Force-directed + 圓角矩形 + root icon -->
   <script>
     (function () {
+      const ROOT_ICON_URL =
+        "https://rugatha.wordpress.com/wp-content/uploads/2025/05/cropped-e69caae591bde5908d-1_e5b7a5e4bd9ce58d80e59f9f-1-1.png";
+
       const rawData = (window.CAMPAIGN_GRAPH_DATA || []);
 
       function init() {
@@ -169,27 +170,27 @@
           }
         }
 
-        // 依據 label 長度 & level 來決定橢圓大小，避免文字 overflow
-        function getEllipseSize(node) {
+        // 依據 label 長度 & level 來決定圓角矩形大小，避免文字 overflow
+        function getRectSize(node) {
           const textLen = node.label.length;
           // 基礎寬度和高度依層級遞增，呈現階層感
-          let baseRx, baseRy, perChar;
+          let baseW, baseH, perChar;
           if (node.level === 1) {
-            baseRx = 90;
-            baseRy = 32;
-            perChar = 4.5;
+            baseW = 180;
+            baseH = 60;
+            perChar = 5.0;
           } else if (node.level === 2) {
-            baseRx = 80;
-            baseRy = 28;
-            perChar = 4.0;
+            baseW = 170;
+            baseH = 50;
+            perChar = 4.5;
           } else {
-            baseRx = 70;
-            baseRy = 24;
-            perChar = 3.5;
+            baseW = 160;
+            baseH = 44;
+            perChar = 4.0;
           }
-          const rx = Math.max(baseRx, 30 + textLen * perChar);
-          const ry = baseRy;
-          return { rx, ry };
+          const w = Math.max(baseW, 40 + textLen * perChar);
+          const h = baseH;
+          return { width: w, height: h };
         }
 
         function buildGraphData() {
@@ -223,20 +224,21 @@
             d3
               .forceLink(links)
               .id(d => d.id)
-              .distance(140)
+              .distance(160)
               .strength(0.9)
           )
           .force(
             "charge",
-            d3.forceManyBody().strength(-400)
+            d3.forceManyBody().strength(-500)
           )
           .force(
             "center",
             d3.forceCenter(width / 2, height / 2)
           )
           .force("collision", d3.forceCollide().radius(d => {
-            const size = getEllipseSize(d);
-            return size.rx + 10; // 依橢圓寬度決定碰撞半徑，避免重疊
+            const size = getRectSize(d);
+            // 半寬 + 邊距，避免矩形重疊
+            return size.width / 2 + 15;
           }));
 
         // edges & nodes selection
@@ -285,20 +287,36 @@
                 .on("end", dragended)
             );
 
-          // 橢圓（半徑用 JS 設，Firefox 也 OK）
-          nodeEnter
-            .append("ellipse")
-            .attr("class", "node-ellipse")
-            .attr("cx", 0)
-            .attr("cy", 0)
-            .attr("rx", d => getEllipseSize(d).rx)
-            .attr("ry", d => getEllipseSize(d).ry);
+          // Level 1 用 icon，Level 2/3 用圓角矩形
+          nodeEnter.each(function (d) {
+            const g = d3.select(this);
 
-          // 文字
+            if (d.level === 1) {
+              const size = 90; // icon 大小，可視需要微調
+              g.append("image")
+                .attr("href", ROOT_ICON_URL)
+                .attr("width", size)
+                .attr("height", size)
+                .attr("x", -size / 2)
+                .attr("y", -size / 2);
+            } else {
+              const rectSize = getRectSize(d);
+              g.append("rect")
+                .attr("class", "node-rect")
+                .attr("x", -rectSize.width / 2)
+                .attr("y", -rectSize.height / 2)
+                .attr("width", rectSize.width)
+                .attr("height", rectSize.height)
+                .attr("rx", 18)  // 圓角半徑
+                .attr("ry", 18);
+            }
+          });
+
+          // 文字（Level 1 用 icon，不另外顯示文字）
           nodeEnter
             .append("text")
             .attr("class", "node-label")
-            .text(d => d.label);
+            .text(d => (d.level === 1 ? "" : d.label));
 
           // 點節點：展開 / 收合 + 置中
           nodeEnter.on("click", (event, d) => {
