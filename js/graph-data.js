@@ -153,7 +153,7 @@ const BASE_CAMPAIGN_GRAPH_DATA = [
   },
   {
     id: "brown-howling",
-    label: "Howling of the Wolf",
+    label: "C02 Howling of the Wolf",
     level: 3,
     parent: "brown"
   },

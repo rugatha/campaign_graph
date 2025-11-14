@@ -132,14 +132,47 @@ window.RugathaLayout = (function () {
     return centerAngle;
   }
 
+  function placeChildrenLine(parent, kids, directionAngle, occupiedNodes) {
+    if (!kids || kids.length === 0) return;
+
+    const baseRadius =
+      parent.level === 1 ? 220 :
+      parent.level === 2 ? 190 :
+      160;
+
+    const gap = 140;
+    const dirX = Math.cos(directionAngle);
+    const dirY = Math.sin(directionAngle);
+
+    kids.forEach((c, i) => {
+      const distance = baseRadius + i * gap;
+      const targetX = parent.x + dirX * distance;
+      const targetY = parent.y + dirY * distance;
+
+      const slot = findAvailableSlot(targetX, targetY, c, occupiedNodes || kids, parent);
+      const finalX = slot.x;
+      const finalY = slot.y;
+
+      if (!isFinite(c.x) || !isFinite(c.y)) {
+        c.x = finalX;
+        c.y = finalY;
+      } else {
+        c.x = (c.x * 2 + finalX) / 3;
+        c.y = (c.y * 2 + finalY) / 3;
+      }
+    });
+  }
+
   function placeChildrenFan(parent, kids, occupiedNodes, rawMap) {
     if (!kids || kids.length === 0) return;
 
     let fan = Math.PI * 0.95;     // 約 170 度扇形，展開時有更大垂直間距
-    if (parent.level === 2) {
-      fan = Math.PI * 0.45;       // 第三層集中一些，強調遠離方向
-    }
     const center = getFanCenter(parent, rawMap); // 依前面函式決定扇形中心角度
+    if (parent.level === 2) {
+      placeChildrenLine(parent, kids, center, occupiedNodes);
+      return;
+    }
+
     const start = center - fan / 2;              // 扇形起始角
     const end   = center + fan / 2;              // 扇形結束角
 
