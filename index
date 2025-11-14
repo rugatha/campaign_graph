@@ -1,12 +1,18 @@
+
+---
+
+## index.html 內容
+
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Rugatha Relation Graph</title>
+  <title>Rugatha Campaign Graph</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <style>
-    /* ====== 外層容器 ====== */
+    /* ====== Outer container ====== */
     #rugatha-graph-plugin {
       width: 100%;
       max-width: 1000px;
@@ -15,11 +21,11 @@
       box-sizing: border-box;
     }
 
-    /* ====== SVG 畫布 ====== */
+    /* ====== SVG canvas ====== */
     #rugatha-graph-svg {
       width: 100%;
       height: 100%;
-      background: #ffffff; /* 白底 */
+      background: #ffffff; /* white background */
       border: 1px solid #ccc;
       cursor: grab;
       user-select: none;
@@ -29,14 +35,14 @@
       cursor: grabbing;
     }
 
-    /* ====== 節點（橢圓） ====== */
+    /* ====== Nodes (ellipses) ====== */
     .rugatha-node ellipse {
-      fill: #ffffff;   /* 白底 */
-      stroke: #000000; /* 黑線 */
+      fill: #ffffff;   /* white fill */
+      stroke: #000000; /* black stroke */
       stroke-width: 1.5;
     }
 
-    /* ====== 節點文字 ====== */
+    /* ====== Node labels ====== */
     .rugatha-node text {
       fill: #000000;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -45,7 +51,7 @@
       pointer-events: none;
     }
 
-    /* ====== 不同階層字體大小 ====== */
+    /* ====== Font sizes by level ====== */
     .rugatha-node.level-1 text {
       font-size: 20px;
       font-weight: bold;
@@ -61,7 +67,7 @@
       font-weight: 500;
     }
 
-    /* ====== 關聯線 ====== */
+    /* ====== Edges ====== */
     .rugatha-edge {
       stroke: #555555;
       stroke-width: 1.2;
@@ -69,7 +75,11 @@
   </style>
 </head>
 <body>
-  <!-- 容器 + SVG 畫布 -->
+  <h1 style="text-align:center; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+    Rugatha Campaign Graph
+  </h1>
+
+  <!-- Container + SVG canvas -->
   <div id="rugatha-graph-plugin">
     <svg id="rugatha-graph-svg"></svg>
   </div>
@@ -82,12 +92,16 @@
 
         const SVG_NS = "http://www.w3.org/2000/svg";
 
-        // ===== viewport：所有節點與線條放在這裡，方便平移/縮放 =====
+        /* ====== Viewport group: everything (nodes + edges) goes inside here ====== */
         const viewport = document.createElementNS(SVG_NS, "g");
         viewport.setAttribute("id", "rugatha-graph-viewport");
         svg.appendChild(viewport);
 
-        // ===== 節點資料（含 parent） =====
+        /* ====== Data: nodes with parent relationship ======
+           level 1: # Rugatha
+           level 2: ## Rugatha Plus / lite / WILDS / Legends / Experience / Brown
+           level 3: ### Cxx / OX / EX
+        */
         const nodesData = [
           { id: "rugatha", label: "Rugatha", level: 1, parent: null },
 
@@ -132,20 +146,20 @@
         const nodeMap = new Map();
         const edges = [];
 
-        // 視圖狀態（平移、縮放）
+        /* ====== View state (pan, zoom) ====== */
         let translate = { x: 120, y: 80 };
         let scale = 1;
         let isPanning = false;
         let panStart = { x: 0, y: 0 };
 
-        // 不同階層橢圓大小
+        /* ====== Node sizes per level ====== */
         function getSizeForLevel(level) {
           if (level === 1) return { w: 200, h: 70 };
           if (level === 2) return { w: 180, h: 60 };
           return { w: 100, h: 40 }; // level 3
         }
 
-        // 初始化節點物件
+        /* ====== Initialize node objects ====== */
         nodesData.forEach(function (data) {
           const size = getSizeForLevel(data.level);
           const node = {
@@ -154,7 +168,7 @@
             level: data.level,
             parentId: data.parent,
             children: [],
-            expanded: data.level === 1, // 只有 Rugatha 一開始展開
+            expanded: data.level === 1, // root expanded, descendants depend on it
             visible: false,
             x: 0,
             y: 0,
@@ -166,14 +180,14 @@
           nodes.push(node);
         });
 
-        // 建立 parent → children 關係
+        // Build parent → children links
         nodes.forEach(function (node) {
           if (!node.parentId) return;
           const parent = nodeMap.get(node.parentId);
           if (parent) parent.children.push(node);
         });
 
-        // 建立 SVG 節點
+        /* ====== Create SVG nodes: <g> + <ellipse> + <text> ====== */
         nodes.forEach(function (node) {
           const g = document.createElementNS(SVG_NS, "g");
           g.classList.add("rugatha-node", "level-" + node.level);
@@ -192,7 +206,7 @@
           g.appendChild(ellipse);
           g.appendChild(text);
 
-          // 點節點：展開/收合 + 置中
+          // Click: toggle children (if any) and center on node
           g.addEventListener("click", function (evt) {
             evt.stopPropagation();
             if (node.children && node.children.length > 0) {
@@ -202,7 +216,7 @@
             centerOnNode(node);
           });
 
-          // 阻止 mousedown 冒泡，避免當作拖曳背景
+          // Prevent panning start when clicking on a node
           g.addEventListener("mousedown", function (evt) {
             evt.stopPropagation();
           });
@@ -211,7 +225,7 @@
           node.group = g;
         });
 
-        // 建立關聯線
+        /* ====== Create edges (parent → child) ====== */
         nodes.forEach(function (node) {
           if (!node.parentId) return;
           const parent = nodeMap.get(node.parentId);
@@ -222,7 +236,7 @@
           edges.push({ parent: parent, child: node, line: line });
         });
 
-        // 套用平移/縮放
+        /* ====== Apply pan/zoom transform ====== */
         function applyTransform() {
           viewport.setAttribute(
             "transform",
@@ -230,7 +244,7 @@
           );
         }
 
-        // 節點置中
+        /* ====== Center a node in the viewport ====== */
         function centerOnNode(node) {
           if (!node) return;
           const rect = svg.getBoundingClientRect();
@@ -242,9 +256,9 @@
           applyTransform();
         }
 
-        // 排版 + 更新畫面
+        /* ====== Layout and render ====== */
         function layoutAndRender() {
-          // 1) 可見性
+          // 1) Visibility: a node is visible only if all ancestors are expanded
           nodes.forEach(function (node) {
             if (node.level === 1) {
               node.visible = true;
@@ -254,15 +268,15 @@
             }
           });
 
-          // 2) 排版
-          const levelX = { 1: 80, 2: 320, 3: 600 }; // 左→右
+          // 2) Layout: left-to-right by level; level 3 centered around its parent vertically
+          const levelX = { 1: 80, 2: 320, 3: 600 };
           const levelStartY = 40;
-          const parentGapY = 100; // Level 1 & 2 垂直間距
-          const childGapY = 40;   // 子節點圍繞母節點的間距
+          const parentGapY = 100;
+          const childGapY = 40;
 
           const levelCounters = { 1: 0, 2: 0 };
 
-          // (a) Level 1 & 2
+          // (a) Place level 1 and 2 nodes (top-down)
           nodes.forEach(function (node) {
             if (!node.group) return;
 
@@ -271,7 +285,7 @@
               return;
             }
 
-            if (node.level === 3) return; // Level 3 後面再排
+            if (node.level === 3) return; // skip for now
 
             const lvl = node.level;
             const idx = levelCounters[lvl]++;
@@ -285,7 +299,7 @@
             );
           });
 
-          // (b) Level 3：以母節點為中心上下展開
+          // (b) Place level 3 nodes around their parent vertically
           const childrenByParent = new Map();
           nodes.forEach(function (node) {
             if (node.level !== 3 || !node.visible) return;
@@ -303,7 +317,7 @@
             if (n === 0) return;
 
             children.forEach(function (child, i) {
-              const offsetIndex = i - (n - 1) / 2; // 以 0 為中心
+              const offsetIndex = i - (n - 1) / 2; // centered around 0
               child.x = levelX[3];
               child.y = parent.y + offsetIndex * childGapY;
 
@@ -315,7 +329,7 @@
             });
           });
 
-          // (c) 更新線條
+          // (c) Update edges
           edges.forEach(function (edge) {
             const parent = edge.parent;
             const child = edge.child;
@@ -331,7 +345,7 @@
           });
         }
 
-        // 背景平移（拖曳）
+        /* ====== Panning (dragging background) ====== */
         svg.addEventListener("mousedown", function (evt) {
           isPanning = true;
           panStart.x = evt.clientX;
@@ -356,7 +370,7 @@
           svg.classList.remove("rugatha-panning");
         });
 
-        // 滾輪縮放
+        /* ====== Mouse wheel zoom ====== */
         svg.addEventListener(
           "wheel",
           function (evt) {
@@ -370,7 +384,7 @@
           { passive: false }
         );
 
-        // 初始排版
+        // Initial layout
         layoutAndRender();
         applyTransform();
       }
