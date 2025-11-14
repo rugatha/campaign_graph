@@ -135,7 +135,7 @@ window.RugathaLayout = (function () {
     if (!kids || kids.length === 0) return;
 
     const fan = Math.PI * 0.95;   // 約 170 度扇形，展開時有更大垂直間距
-    const center = getFanCenter(parent, rawMap); // 依前面函式決定扇形中心角度
+    const center = getFanCenter(parent, rawMap) + Math.PI; // 依前面函式決定扇形中心角度
     const start = center - fan / 2;              // 扇形起始角
     const end   = center + fan / 2;              // 扇形結束角
 
