@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Rugatha Campaign Graph</title>
+  <title>Rugatha Campaigns</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <style>
@@ -120,7 +120,7 @@
   </style>
 </head>
 <body>
-  <h1>Rugatha Campaign Graph</h1>
+  <h1>Rugatha Campaigns</h1>
 
   <div id="rugatha-graph-plugin">
     <svg id="rugatha-graph-svg"></svg>
@@ -146,10 +146,11 @@
         "https://rugatha.wordpress.com/wp-content/uploads/2025/05/cropped-e69caae591bde5908d-1_e5b7a5e4bd9ce58d80e59f9f-1-1.png";
 
       const rawData = window.CAMPAIGN_GRAPH_DATA || [];
-      let pendingCenter = null;         // 下一次 tick 要置中的節點
-      let currentTransform = d3.zoomIdentity; // 目前的 zoom transform（給按鈕用）
+      let pendingCenter = null;                // 下一次 tick 要置中的節點
+      let currentTransform = d3.zoomIdentity;  // 目前 zoom transform（給按鈕用）
       let nodes = [];
       let links = [];
+      let nodeById = null;                     // 給 Home 按鈕用
 
       function init() {
         const svg = d3.select("#rugatha-graph-svg");
@@ -161,7 +162,7 @@
         const viewport = svg.append("g").attr("id", "rugatha-viewport");
 
         // 建立 node map
-        const nodeById = new Map();
+        nodeById = new Map();
         rawData.forEach(d => {
           nodeById.set(d.id, {
             id: d.id,
@@ -273,16 +274,16 @@
 
         ({ nodes, links } = buildGraphData());
 
-        // Force simulation
+        // Force simulation（稍微柔一點，避免太激烈）
         const simulation = d3.forceSimulation(nodes)
           .force("link", d3.forceLink(links)
             .id(d => d.id)
             .distance(160)
             .strength(0.3))
-          .force("charge", d3.forceManyBody().strength(-400))
+          .force("charge", d3.forceManyBody().strength(-350))
           .force("collide", d3.forceCollide().radius(d => getRectSize(d).width / 2 + 20))
           .force("center", d3.forceCenter(width / 2, height / 2))
-          .alphaTarget(0.15)
+          .alphaTarget(0.1)
           .on("tick", ticked);
 
         let linkSel = viewport.append("g")
@@ -298,7 +299,7 @@
 
           simulation.nodes(nodes);
           simulation.force("link").links(links);
-          simulation.alpha(0.5).restart(); // 動畫啟動，但較為平順
+          simulation.alpha(0.35).restart(); // 比之前更穩一點
 
           // edges
           linkSel = linkSel.data(links, d => d.source.id + "-" + d.target.id);
@@ -382,7 +383,7 @@
         }
 
         function dragstarted(event, d) {
-          if (!event.active) simulation.alphaTarget(0.15).restart();
+          if (!event.active) simulation.alphaTarget(0.1).restart();
           d.fx = d.x;
           d.fy = d.y;
         }
@@ -402,14 +403,15 @@
         const zoom = d3.zoom()
           .scaleExtent([0.3, 3])
           .on("zoom", (event) => {
-            currentTransform = event.transform; // 更新目前 transform
+            currentTransform = event.transform;
             viewport.attr("transform", event.transform);
           });
 
         svg.call(zoom);
 
-        // 置中某節點（動畫時間可調）
+        // 置中某節點（動畫時間可調，並避免 NaN 破圖）
         function centerOnNode(node, duration) {
+          if (!node || !isFinite(node.x) || !isFinite(node.y)) return;
           const d = duration || 350;
           const t = d3.zoomIdentity
             .translate(width / 2 - node.x, height / 2 - node.y)
@@ -501,9 +503,25 @@
           fitToView();
         });
 
+        // Home：收合到只剩第一、二階層，並回到初始視圖
         document.getElementById("btn-home").addEventListener("click", (e) => {
           e.stopPropagation();
-          const t = d3.zoomIdentity;
+          pendingCenter = null;
+
+          // Root 展開，其餘收合 → 只顯示 Level 1 & Level 2
+          nodeById.forEach(n => {
+            if (!n.parent) {
+              n.expanded = true;   // Root
+            } else if (n.level === 2) {
+              n.expanded = false;  // 第二層本身顯示，但不展開第三層
+            } else {
+              n.expanded = false;  // 其餘全部收合
+            }
+          });
+
+          updateGraph();
+
+          const t = d3.zoomIdentity.translate(width / 2, height / 2).scale(1);
           svg.transition().duration(350).call(zoom.transform, t);
         });
 
