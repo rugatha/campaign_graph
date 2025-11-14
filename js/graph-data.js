@@ -266,7 +266,9 @@ const NODE_URL_OVERRIDES = {
   "legends-os04": "https://rugatha.wordpress.com/2022/08/28/the-deadly-prison-break/",
   "legends-os05": "https://rugatha.wordpress.com/legend-5-dragons-orb/",
   "legends-os07": "https://rugatha.wordpress.com/2023/08/29/mylstan-colossus/",
-  "legends-os08": "https://rugatha.com/2024/05/27/lord-octavian-von-odericks-dungeon-of-randomness/"
+  "legends-os08": "https://rugatha.com/2024/05/27/lord-octavian-von-odericks-dungeon-of-randomness/",
+  "exp-e01": null,
+  "exp-e02": null
 };
 
 window.CAMPAIGN_GRAPH_DATA = BASE_CAMPAIGN_GRAPH_DATA.map(node => {
