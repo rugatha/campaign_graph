@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Rugatha Campaign Graph (Neo4j style)</title>
+  <title>Rugatha Campaign Graph (Neo4j-like)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <style>
@@ -31,7 +31,7 @@
     #rugatha-graph-svg {
       width: 100%;
       height: 100%;
-      background: #05070a; /* Neo4j-style dark background */
+      background: #05070a; /* 深色底，有 Neo4j 味道 */
       cursor: grab;
       user-select: none;
     }
@@ -40,53 +40,50 @@
       cursor: grabbing;
     }
 
-    /* edges */
+    /* ===== 線條（關聯邊） ===== */
     .rugatha-edge {
       stroke: #374151;
       stroke-width: 1.2;
       stroke-opacity: 0.8;
     }
 
-    /* nodes */
-    .rugatha-node circle {
+    /* ===== 節點橢圓填色與框線（半徑改由 JS 控制） ===== */
+    .node-ellipse {
       stroke: #111827;
-      stroke-width: 1.2;
+      stroke-width: 1.4;
     }
 
-    .rugatha-node.level-1 circle {
-      r: 26;
-      fill: #10b981; /* teal */
+    .level-1 .node-ellipse {
+      fill: #10b981; /* root: teal 綠 */
     }
 
-    .rugatha-node.level-2 circle {
-      r: 22;
-      fill: #3b82f6; /* blue */
+    .level-2 .node-ellipse {
+      fill: #3b82f6; /* 第二層: 藍色 */
     }
 
-    .rugatha-node.level-3 circle {
-      r: 18;
-      fill: #9ca3af; /* gray */
+    .level-3 .node-ellipse {
+      fill: #9ca3af; /* 第三層: 灰色 */
     }
 
-    .rugatha-node text {
+    /* ===== 節點文字 ===== */
+    .node-label {
       fill: #f9fafb;
-      font-size: 10px;
       pointer-events: none;
       text-anchor: middle;
-      dominant-baseline: middle;
+      dominant-baseline: central;
     }
 
-    .rugatha-node.level-1 text {
+    .level-1 .node-label {
+      font-size: 14px;   /* 明顯最大 */
+      font-weight: 800;
+    }
+
+    .level-2 .node-label {
       font-size: 12px;
       font-weight: 700;
     }
 
-    .rugatha-node.level-2 text {
-      font-size: 11px;
-      font-weight: 600;
-    }
-
-    .rugatha-node.level-3 text {
+    .level-3 .node-label {
       font-size: 10px;
       font-weight: 500;
     }
@@ -99,13 +96,13 @@
     <svg id="rugatha-graph-svg"></svg>
   </div>
 
-  <!-- 1) campaign hierarchy data -->
+  <!-- 1) 階層資料 -->
   <script src="graph-data.js"></script>
 
-  <!-- 2) D3.js from CDN -->
+  <!-- 2) D3.js -->
   <script src="https://d3js.org/d3.v7.min.js"></script>
 
-  <!-- 3) main script: force-directed Neo4j-style graph -->
+  <!-- 3) 主程式：Force-directed + 橢圓 + 階層感 -->
   <script>
     (function () {
       const rawData = (window.CAMPAIGN_GRAPH_DATA || []);
@@ -120,7 +117,7 @@
         // zoom / pan group
         const viewport = svg.append("g").attr("id", "rugatha-graph-viewport");
 
-        // build node map (one object per id)
+        // 建立節點 map
         const nodeById = new Map();
         rawData.forEach(d => {
           nodeById.set(d.id, {
@@ -129,32 +126,33 @@
             level: d.level,
             parent: d.parent,
             children: [],
-            expanded: d.level === 1, // root expanded by default
+            expanded: d.level === 1, // root 預設展開
             visible: false,
             x: width / 2,
             y: height / 2
           });
         });
 
-        // build children list
+        // parent -> children
         nodeById.forEach(node => {
           if (node.parent) {
-            const parent = nodeById.get(node.parent);
-            if (parent) parent.children.push(node);
+            const p = nodeById.get(node.parent);
+            if (p) p.children.push(node);
           }
         });
 
-        // compute visibility based on expanded ancestors
+        // 根據 expanded 狀態計算可見性
         function computeVisibility() {
           nodeById.forEach(n => (n.visible = false));
-          // find roots (no parent)
+
+          // 沒有 parent 的當 root，先設為可見
           nodeById.forEach(node => {
             if (!node.parent) {
               node.visible = true;
             }
           });
 
-          // BFS from each visible node
+          // BFS 往下展開
           let changed = true;
           while (changed) {
             changed = false;
@@ -169,6 +167,29 @@
               }
             });
           }
+        }
+
+        // 依據 label 長度 & level 來決定橢圓大小，避免文字 overflow
+        function getEllipseSize(node) {
+          const textLen = node.label.length;
+          // 基礎寬度和高度依層級遞增，呈現階層感
+          let baseRx, baseRy, perChar;
+          if (node.level === 1) {
+            baseRx = 90;
+            baseRy = 32;
+            perChar = 4.5;
+          } else if (node.level === 2) {
+            baseRx = 80;
+            baseRy = 28;
+            perChar = 4.0;
+          } else {
+            baseRx = 70;
+            baseRy = 24;
+            perChar = 3.5;
+          }
+          const rx = Math.max(baseRx, 30 + textLen * perChar);
+          const ry = baseRy;
+          return { rx, ry };
         }
 
         function buildGraphData() {
@@ -202,30 +223,28 @@
             d3
               .forceLink(links)
               .id(d => d.id)
-              .distance(120)
+              .distance(140)
               .strength(0.9)
           )
           .force(
             "charge",
-            d3.forceManyBody().strength(-350)
+            d3.forceManyBody().strength(-400)
           )
           .force(
             "center",
             d3.forceCenter(width / 2, height / 2)
           )
           .force("collision", d3.forceCollide().radius(d => {
-            if (d.level === 1) return 36;
-            if (d.level === 2) return 32;
-            return 28;
+            const size = getEllipseSize(d);
+            return size.rx + 10; // 依橢圓寬度決定碰撞半徑，避免重疊
           }));
 
-        // edges
+        // edges & nodes selection
         let linkSel = viewport
           .append("g")
           .attr("class", "edges")
           .selectAll("line");
 
-        // nodes (group: circle + text)
         let nodeSel = viewport
           .append("g")
           .attr("class", "nodes")
@@ -237,7 +256,7 @@
           simulation.nodes(nodes);
           simulation.force("link").links(links);
 
-          // join edges
+          // edges
           linkSel = linkSel
             .data(links, d => d.source.id + "-" + d.target.id);
 
@@ -250,9 +269,8 @@
 
           linkSel = linkEnter.merge(linkSel);
 
-          // join nodes
+          // nodes
           nodeSel = nodeSel.data(nodes, d => d.id);
-
           nodeSel.exit().remove();
 
           const nodeEnter = nodeSel
@@ -267,13 +285,22 @@
                 .on("end", dragended)
             );
 
+          // 橢圓（半徑用 JS 設，Firefox 也 OK）
           nodeEnter
-            .append("circle");
+            .append("ellipse")
+            .attr("class", "node-ellipse")
+            .attr("cx", 0)
+            .attr("cy", 0)
+            .attr("rx", d => getEllipseSize(d).rx)
+            .attr("ry", d => getEllipseSize(d).ry);
 
+          // 文字
           nodeEnter
             .append("text")
+            .attr("class", "node-label")
             .text(d => d.label);
 
+          // 點節點：展開 / 收合 + 置中
           nodeEnter.on("click", (event, d) => {
             event.stopPropagation();
             if (d.children && d.children.length > 0) {
@@ -298,7 +325,7 @@
           nodeSel.attr("transform", d => `translate(${d.x},${d.y})`);
         });
 
-        // drag handlers
+        // drag 行為
         function dragstarted(event, d) {
           if (!event.active) simulation.alphaTarget(0.3).restart();
           d.fx = d.x;
@@ -325,7 +352,7 @@
 
         svg.call(zoom);
 
-        // center viewport on a node
+        // 置中特定節點
         function centerOnNode(node) {
           const t = d3.zoomIdentity
             .translate(width / 2 - node.x, height / 2 - node.y)
@@ -336,13 +363,15 @@
             .call(zoom.transform, t);
         }
 
-        // background click: just recentre all
+        // 點背景：重置視圖
         svg.on("click", () => {
-          const t = d3.zoomIdentity.translate(width / 2, height / 2).scale(1);
+          const t = d3.zoomIdentity
+            .translate(width / 2, height / 2)
+            .scale(1);
           svg.transition().duration(400).call(zoom.transform, t);
         });
 
-        // initial render
+        // 初始 render
         updateGraph();
       }
 
