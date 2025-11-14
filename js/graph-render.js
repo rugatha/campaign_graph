@@ -26,6 +26,15 @@ window.RugathaRender = (function () {
     return getRectSize(n);
   }
 
+  function appendLink(selection, node) {
+    return selection.append("a")
+      .attr("class", "node-label-link")
+      .attr("target", "_blank")
+      .attr("rel", "noopener noreferrer")
+      .attr("href", node.url)
+      .on("click", event => event.stopPropagation());
+  }
+
   function renderNodeControls(g, node, bounds, handlers) {
     if (node.level > 2) return;
 
@@ -88,7 +97,8 @@ window.RugathaRender = (function () {
       const g = d3.select(this);
       const bounds = getNodeBounds(d);
       if (d.level === 1) {
-        g.append("image")
+        const imageParent = d.url ? appendLink(g, d) : g;
+        imageParent.append("image")
           .attr("href", ROOT_ICON_URL)
           .attr("width", bounds.width)
           .attr("height", bounds.height)
@@ -106,19 +116,14 @@ window.RugathaRender = (function () {
       }
 
       renderNodeControls(g, d, bounds, handlers);
+
+      if (d.level !== 1) {
+        const labelParent = d.url ? appendLink(g, d) : g;
+        labelParent.append("text")
+          .attr("class", "node-label")
+          .text(d.label || "");
+      }
     });
-
-    // 標籤文字改為可點擊超連結（root 無文字）
-    const labelLink = enter.append("a")
-      .attr("class", "node-label-link")
-      .attr("target", "_blank")
-      .attr("rel", "noopener noreferrer")
-      .attr("href", d => d.url || "https://rugatha.com")
-      .on("click", event => event.stopPropagation());
-
-    labelLink.append("text")
-      .attr("class", "node-label")
-      .text(d => (d.level === 1 ? "" : d.label || ""));
 
     // 拖曳（D3 v7 正確寫法，用 event 參數）
     enter.call(

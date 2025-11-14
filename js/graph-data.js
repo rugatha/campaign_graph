@@ -225,6 +225,54 @@ const BASE_CAMPAIGN_GRAPH_DATA = [
   }
 ];
 
-window.CAMPAIGN_GRAPH_DATA = BASE_CAMPAIGN_GRAPH_DATA.map(node =>
-  Object.assign({ url: DEFAULT_NODE_URL }, node)
-);
+const NODE_URL_OVERRIDES = {
+  // Level 1
+  rugatha: "https://rugatha.com/rugatha-home/",
+
+  // Level 2
+  "rugatha-main": "https://rugatha.com/campaigns/",
+  plus: "https://rugatha.com/rugatha-plus/",
+  plus1: "https://rugatha.com/rugatha-plus-1/",
+  lite: "https://rugatha.com/rugatha-lite/",
+  wilds: "https://rugatha.com/rugatha-wilds/",
+  brown: "https://rugatha.com/rugatha-brown/",
+  legends: "https://rugatha.com/rugatha-legends/",
+  exp: null,
+
+  // Level 3
+  "rugatha-c01": "https://rugatha.wordpress.com/campaign-1-curse-of-vowalon/",
+  "rugatha-c02": "https://rugatha.wordpress.com/campaign-2-beneath-the-temple/",
+  "rugatha-c03": "https://rugatha.com/campaign-3-korringfield-reunion/",
+  "rugatha-c04": "https://rugatha.com/campaign-4-the-blooming-of-macksohn/",
+  "rugatha-c05": "https://rugatha.com/campaign-5-mattington-shattered/",
+  "plus-c05": "https://rugatha.com/campaign-5-mattington-shattered/",
+  "lite-c05": "https://rugatha.com/campaign-5-mattington-shattered/",
+  "plus-c06": "https://rugatha.wordpress.com/r-campaign-6-hand-of-the-lich/",
+  "plus-c07": "https://rugatha.com/r-campaign-7-before-the-next-full-moon/",
+  "plus1-c01": "https://rugatha.com/2024/07/17/campaign-1-to-the-deep-and-back/",
+  "lite-c06": "https://rugatha.wordpress.com/rlite-campaign-6-the-gift-from-alfenor/",
+  "lite-c07": "https://rugatha.wordpress.com/rlite-campaign-7-lurking-dangers/",
+  "lite-c08": "https://rugatha.com/rlite-campaign-8-deep-into-lothum/",
+  "lite-c09": "https://rugatha.com/rlite-campaign-9-the-cave-of-drogsland/",
+  "lite-c10": "https://rugatha.com/rlite-campaign-10-requiem-of-the-feathered-estate/",
+  "lite-c11": "https://rugatha.com/rlite-campaign-11-seats-of-the-eclipse/",
+  "wilds-c02": "https://rugatha.com/rwilds-campaign-2-gathering-of-the-chosen/",
+  "wilds-c03": "https://rugatha.com/rwilds-campaign-3-storm-of-mudtown/",
+  "wilds-c04": "https://rugatha.com/rwilds-campaign-4-heir-to-rathanad/",
+  "brown-c01": "https://rugatha.wordpress.com/rbrown-campaign-1-dark-petals/",
+  "brown-howling": "https://rugatha.wordpress.com/rbrown-campaign-2-howling-of-the-wolf/",
+  "legends-os01": "https://rugatha.wordpress.com/2022/02/07/the-false-hydra-of-moorland-haunt/",
+  "legends-os02": "https://rugatha.wordpress.com/2022/02/07/the-disappearance-of-gustavo-norman/",
+  "legends-os04": "https://rugatha.wordpress.com/2022/08/28/the-deadly-prison-break/",
+  "legends-os05": "https://rugatha.wordpress.com/legend-5-dragons-orb/",
+  "legends-os07": "https://rugatha.wordpress.com/2023/08/29/mylstan-colossus/",
+  "legends-os08": "https://rugatha.com/2024/05/27/lord-octavian-von-odericks-dungeon-of-randomness/"
+};
+
+window.CAMPAIGN_GRAPH_DATA = BASE_CAMPAIGN_GRAPH_DATA.map(node => {
+  const hasOverride = Object.prototype.hasOwnProperty.call(NODE_URL_OVERRIDES, node.id);
+  const overrideUrl = hasOverride ? NODE_URL_OVERRIDES[node.id] : undefined;
+  return Object.assign({}, node, {
+    url: overrideUrl === undefined ? DEFAULT_NODE_URL : overrideUrl
+  });
+});
