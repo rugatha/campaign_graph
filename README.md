@@ -1,33 +1,105 @@
-# campaign_graph
+# Rugatha Campaign Graph
 
-Interactive relation graph for the Rugatha campaigns.
+This project provides an interactive, collapsible, D3.js-based campaign hierarchy
+viewer for the Rugatha TRPG world.
 
-This project is a single-page HTML app that shows an interactive, zoomable,
-and pannable relation graph of different Rugatha campaign lines. Nodes can be
-expanded / collapsed and the view will automatically center on the clicked node.
+The graph features:
+- Multi-level hierarchy (Root → Category → Campaign)
+- Smooth expand/collapse animations
+- Fan-based child expansion layout (avoid node overlap)
+- Zoom / Pan / Fit / Home controls
+- WordPress-safe embedding method
+- Modular JS architecture for easy future maintenance
 
-## Features
+---
 
-- Left-to-right layered layout:
-  - Level 1: `Rugatha`
-  - Level 2: `Rugatha Plus`, `Rugatha lite`, `Rugatha WILDS`,
-    `Rugatha Legends`, `Rugatha Experience`, `Rugatha Brown`
-  - Level 3: Child campaigns (C01, C02, ..., O1, O2, E1, E2, etc.)
-- Nodes as ellipses with text labels
-- Third-level (###) nodes are collapsed by default
-- Clicking nodes:
-  - Toggles expansion of their children (if any)
-  - Automatically recenters the clicked node on the viewport
-- Graph:
-  - Draggable (panning)
-  - Mouse-wheel zoom (with limits)
-- Clean black-on-white styling for testing and embedding.
+## 📁 Project Structure
 
-## How to run locally
+```
+campaign_graph/
+│
+├── index.html
+│
+├── README.md
+│
+├── css/
+│   └── style.css
+│
+├── js/
+│   ├── graph-data.js
+│   ├── graph-layout.js
+│   ├── graph-render.js
+│   ├── graph-zoom.js
+│   └── main.js
+│
+└── assets/
+    └── rugatha-icon.png
+```
 
-Just open `index.html` in your browser:
+---
 
-```bash
-git clone https://github.com/<your-username>/campaign_graph.git
-cd campaign_graph
-# then double-click index.html or open it with your browser
+## 🚀 Deploy on GitHub Pages
+
+1. Push the folder to a GitHub repository.
+2. Go to **Settings → Pages**.
+3. Under *Build and Deployment*, set:
+   - Source: **Deploy from branch**
+   - Branch: `main`
+   - Folder: `/ (root)` or `/docs`
+4. Visit the published URL:
+
+```
+https://<your-username>.github.io/campaign_graph/
+```
+
+---
+
+## 🧩 Embedding in WordPress (Without iframes)
+
+Your WordPress installation may block `<script>` or `<iframe>`.  
+Use this instead:
+
+```html
+<a href="https://<your-username>.github.io/campaign_graph/" target="_blank">
+  Open Rugatha Campaigns Graph
+</a>
+```
+
+---
+
+## 🛠 Updating Hierarchy
+
+Edit:
+
+```
+js/graph-data.js
+```
+
+Each row looks like:
+
+```js
+{ id:"rp-c06", label:"C06 Hand of the Lich", level:3, parent:"rp" }
+```
+
+Rules:
+- `id`: unique
+- `label`: display name
+- `level`: 1, 2, or 3
+- `parent`: id of parent node
+
+After editing, refresh the page.
+
+---
+
+## 🔧 Debugging Display Issues
+
+If the graph appears shifted or nodes overlap:
+- Use **Ctrl+Shift+R** to hard refresh
+- Ensure all JS files are uploaded
+- Ensure your icon exists in `/assets`
+
+---
+
+## 📜 License
+
+MIT License.
