@@ -62,6 +62,11 @@ h1 {
   text-decoration: underline;
 }
 
+#rugatha-graph-svg [data-focused-level="3"] .level-1,
+#rugatha-graph-svg [data-focused-level="3"] .level-2 {
+  opacity: 0.35;
+}
+
 .level-1 .node-label {
   font-size: 14px;
   font-weight: 800;

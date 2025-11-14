@@ -28,13 +28,14 @@ window.RugathaLayout = (function () {
     return 80;
   }
 
-  function findAvailableSlot(targetX, targetY, node, occupied) {
+  function findAvailableSlot(targetX, targetY, node, occupied, parentNode) {
     const padding = 18;
     const selfRadius = estimateNodeRadius(node);
 
     function isFree(x, y) {
       for (const other of occupied) {
         if (other === node) continue;
+        if (other === parentNode) continue; // 可與父節點維持既定距離，不用再避讓
         if (!other.visible) continue;
         if (!isFinite(other.x) || !isFinite(other.y)) continue;
         const minDist = selfRadius + estimateNodeRadius(other) + padding;
@@ -121,20 +122,12 @@ window.RugathaLayout = (function () {
     if (!isFinite(parent.x) || !isFinite(parent.y)) return 0;
 
     // 計算「從目前節點指向父層」的向量
-    const dxToParent = grand.x - parent.x;
-    const dyToParent = grand.y - parent.y;
-    if (Math.abs(dxToParent) < 1e-2 && Math.abs(dyToParent) < 1e-2) return 0;
+    const dxAway = parent.x - grand.x;
+    const dyAway = parent.y - grand.y;
+    if (Math.abs(dxAway) < 1e-2 && Math.abs(dyAway) < 1e-2) return 0;
 
-    // Canvas 的 y 軸向下遞增，因此要把 y 差值轉為「數學座標系」(向上為正) 再傳給 atan2
-    const mathDyToParent = -dyToParent;
-
-    // atan2 得到朝向父層的角度（第 2 層保持這個方向，第 3 層之後再調整）
-    let centerAngle = Math.atan2(mathDyToParent, dxToParent);
-
-    // 若 parent.level === 2，表示即將繪製第 3 層；將扇形整體轉 180°
-    if (parent.level === 2) {
-      centerAngle += Math.PI;
-    }
+    // 以前一層指向目前節點的方向當作扇形中心，再轉 180 度讓下一層持續背離父層
+    let centerAngle = Math.atan2(dyAway, dxAway);
 
     return centerAngle;
   }
@@ -142,7 +135,10 @@ window.RugathaLayout = (function () {
   function placeChildrenFan(parent, kids, occupiedNodes, rawMap) {
     if (!kids || kids.length === 0) return;
 
-    const fan = Math.PI * 0.95;   // 約 170 度扇形，展開時有更大垂直間距
+    let fan = Math.PI * 0.95;     // 約 170 度扇形，展開時有更大垂直間距
+    if (parent.level === 2) {
+      fan = Math.PI * 0.45;       // 第三層集中一些，強調遠離方向
+    }
     const center = getFanCenter(parent, rawMap); // 依前面函式決定扇形中心角度
     const start = center - fan / 2;              // 扇形起始角
     const end   = center + fan / 2;              // 扇形結束角
@@ -163,7 +159,7 @@ window.RugathaLayout = (function () {
       const targetX = parent.x + Math.cos(angle) * r;
       const targetY = parent.y + Math.sin(angle) * r + offset;
 
-      const slot = findAvailableSlot(targetX, targetY, c, occupiedNodes || kids);
+      const slot = findAvailableSlot(targetX, targetY, c, occupiedNodes || kids, parent);
       const finalX = slot.x;
       const finalY = slot.y;
 

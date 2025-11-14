@@ -67,6 +67,9 @@
   initPositions();
 
   const viewport = svg.append("g").attr("id", "rugatha-viewport");
+  const graphState = {
+    focusedLevel: 2
+  };
 
   function getCollisionRadius(node) {
     const childCount = Array.isArray(node.children)
@@ -121,6 +124,9 @@
     if (node.expanded === nextState) return;
 
     node.expanded = nextState;
+    if (node.level === 2) {
+      graphState.focusedLevel = nextState ? 3 : 2;
+    }
     update();
   }
 
@@ -147,6 +153,9 @@
     // Node
     nodeSel = nodeSel.data(nodes, d => d.id);
     nodeSel.exit().remove();
+
+    viewport
+      .attr("data-focused-level", graphState.focusedLevel);
 
     nodeSel = RugathaRender.renderNodes(viewport, nodeSel, simulation, {
       onToggle: (event, d) => changeNodeExpanded(event, d),
@@ -197,6 +206,7 @@
   document.getElementById("btn-home").onclick = e => {
     e.stopPropagation();
     pendingCenter = null;
+    graphState.focusedLevel = 2;
 
     // Home：回到只顯示第一、第二層
     nodeMap.forEach(n => {
